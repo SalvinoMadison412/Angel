@@ -13,3 +13,4 @@ export * from "./RadialCountdown";
 export * from "./SchematicRouteMap";
 export * from "./RouteMap";
 export * from "./ScreenBackground";
+export * from "./TabBarIcon";

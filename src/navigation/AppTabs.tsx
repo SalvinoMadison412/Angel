@@ -1,6 +1,7 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React from "react";
 import { StyleSheet, Text } from "react-native";
+import { TabBarIcon, TabBarIconName } from "../components";
 import { colors, fontFamily } from "../theme";
 import { HomeScreen } from "../screens/home/HomeScreen";
 import { DeviceScreen } from "../screens/device/DeviceScreen";
@@ -17,6 +18,13 @@ const LABELS: Record<keyof AppTabParamList, string> = {
   Plan: "PLAN",
 };
 
+const ICONS: Record<keyof AppTabParamList, TabBarIconName> = {
+  Home: "home",
+  Device: "device",
+  Guardians: "guardians",
+  Plan: "plan",
+};
+
 export function AppTabs() {
   return (
     <Tab.Navigator
@@ -25,7 +33,9 @@ export function AppTabs() {
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textDim,
-        tabBarShowIcon: false,
+        tabBarIcon: ({ color, size }) => (
+          <TabBarIcon name={ICONS[route.name as keyof AppTabParamList]} color={color} size={size} />
+        ),
         tabBarLabel: ({ color }) => (
           <Text style={[styles.label, { color }]}>{LABELS[route.name as keyof AppTabParamList]}</Text>
         ),
