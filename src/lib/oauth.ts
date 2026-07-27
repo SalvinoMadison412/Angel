@@ -1,4 +1,3 @@
-import { makeRedirectUri } from "expo-auth-session";
 import * as QueryParams from "expo-auth-session/build/QueryParams";
 import * as WebBrowser from "expo-web-browser";
 import { supabase } from "./supabase";
@@ -7,13 +6,17 @@ import { supabase } from "./supabase";
 // a no-op on native. See https://docs.expo.dev/versions/v57.0.0/sdk/auth-session/
 WebBrowser.maybeCompleteAuthSession();
 
-// Explicit angel://auth/callback redirect target — must also be added to
-// Supabase Dashboard → Authentication → URL Configuration → Redirect URLs,
-// or Supabase falls back to the project's Site URL (localhost:3000 by
-// default) instead of honoring this value. OAuth redirects need a custom
-// scheme, which Expo Go can't register — this flow only completes in a
-// development build or standalone app.
-export const oauthRedirectTo = makeRedirectUri({ scheme: "angel", path: "auth/callback" });
+// Hardcoded rather than makeRedirectUri(): when the JS bundle is loaded
+// through a running Metro dev server (true even in a dev-client build, not
+// just Expo Go), makeRedirectUri() resolves against the dev server's own
+// host instead of the app's native scheme — e.g. exp://10.0.2.2:8081 on the
+// Android emulator — so it never matches Supabase's allow-listed redirect.
+// This value must also be added to Supabase Dashboard → Authentication →
+// URL Configuration → Redirect URLs, or Supabase falls back to the
+// project's Site URL (localhost:3000 by default) instead of honoring it.
+// OAuth redirects need a custom scheme, which Expo Go can't register —
+// this flow only completes in a development build or standalone app.
+export const oauthRedirectTo = "angel://auth/callback";
 
 export async function createSessionFromUrl(url: string) {
   const { params, errorCode } = QueryParams.getQueryParams(url);
