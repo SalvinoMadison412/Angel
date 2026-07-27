@@ -8,16 +8,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0A0A0A",
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.angel.crashdetection",
-      "infoPlist": {
-        "UIBackgroundModes": [
-          "location"
-        ],
-        "NSBluetoothAlwaysUsageDescription": "Angel connects to your CrashDetector sensor over Bluetooth to receive crash alerts."
-      }
-    },
     "android": {
       "package": "com.angel.crashdetection",
       "adaptiveIcon": {
@@ -47,8 +37,7 @@
       [
         "react-native-ble-plx",
         {
-          "isBackgroundEnabled": false,
-          "bluetoothAlwaysPermission": "Angel connects to your CrashDetector sensor over Bluetooth to receive crash alerts."
+          "isBackgroundEnabled": false
         }
       ],
       "expo-secure-store",

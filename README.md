@@ -6,6 +6,9 @@ pushes a single Bluetooth Low Energy notification when it detects an
 impact. This app pairs with it, runs the cancel-countdown emergency flow,
 and alerts guardians with the rider's location.
 
+This is an **Android-only** project — there is no iOS target, no `ios/`
+directory, and no iOS config in `app.json`.
+
 ## This app cannot run in Expo Go
 
 BLE requires a native module (`react-native-ble-plx`), which Expo Go does
@@ -14,14 +17,14 @@ Bluetooth features — that's expected, not a bug.** You need a custom dev
 client:
 
 ```bash
-npx expo prebuild
-npm run ios      # or: npm run android
+npx expo prebuild --platform android
+npm run android
 ```
 
-`npx expo prebuild` regenerates the `ios/`/`android/` native projects from
-`app.json` (including the BLE config plugin, permissions, and Info.plist
-entries below) — rerun it whenever those change. After the first prebuild +
-run, `expo start` and the dev client it launches work like normal for
+`npx expo prebuild --platform android` regenerates the `android/` native
+project from `app.json` (including the BLE config plugin and permissions
+below) — rerun it whenever those change. After the first prebuild + run,
+`expo start` and the dev client it launches work like normal for
 day-to-day iteration; you only need to rebuild the native app when a native
 dependency or its config changes.
 
@@ -30,8 +33,6 @@ on the Expo Go app.
 
 ## Permissions
 
-- **iOS**: `NSBluetoothAlwaysUsageDescription` is set in `app.json`. The
-  system prompt fires the first time the app touches BLE.
 - **Android 12+ (API 31+)**: needs `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT`
   at runtime, in addition to the location permissions already required
   pre-12. The app requests these when you start a scan from

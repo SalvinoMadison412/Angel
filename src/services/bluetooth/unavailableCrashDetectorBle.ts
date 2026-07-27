@@ -3,7 +3,7 @@ import { CrashDetectorBle, DiscoveredDevice } from "./crashDetectorBle";
 
 const MESSAGE =
   "Bluetooth isn't available — this build doesn't have the native BLE module linked. " +
-  "This app needs a custom dev client (npx expo prebuild + expo run:ios/android, or an EAS dev build); it can't run in Expo Go. See the root README.";
+  "This app needs a custom dev client (npx expo prebuild + expo run:android, or an EAS dev build); it can't run in Expo Go. See the root README.";
 
 /**
  * Stand-in used when constructing the real BleManager throws — in

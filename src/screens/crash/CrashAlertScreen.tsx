@@ -90,10 +90,8 @@ export function CrashAlertScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft]);
 
-  // `gestureEnabled: false` on this screen's stack options only blocks iOS's
-  // swipe-back gesture — Android's hardware/gesture back button is a
-  // separate input path and isn't covered by it. Block it too, so the
-  // alert can only be dismissed via the cancel/dispatch buttons.
+  // Android's hardware/gesture back button must be blocked explicitly so
+  // the alert can only be dismissed via the cancel/dispatch buttons.
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
     return () => subscription.remove();
