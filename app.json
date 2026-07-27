@@ -14,7 +14,8 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "location"
-        ]
+        ],
+        "NSBluetoothAlwaysUsageDescription": "Angel connects to your CrashDetector sensor over Bluetooth to receive crash alerts."
       }
     },
     "android": {
@@ -28,7 +29,9 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT"
       ]
     },
     "web": {
@@ -39,6 +42,13 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Angel uses your location to show responders where to find you during a crash alert."
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "bluetoothAlwaysPermission": "Angel connects to your CrashDetector sensor over Bluetooth to receive crash alerts."
         }
       ],
       "expo-secure-store",

@@ -1,6 +1,7 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { CrashEvent } from "../services/bluetooth";
 
 export type AuthStackParamList = {
   PhoneEntry: undefined;
@@ -18,8 +19,9 @@ export type AppTabParamList = {
 
 export type RootStackParamList = {
   Tabs: undefined;
+  DeviceSetup: undefined;
   Calibration: undefined;
-  CrashAlert: { incidentId: string; severity: number; totalSeconds: number };
+  CrashAlert: CrashEvent & { totalSeconds: number };
   LiveIncident: { incidentId: string };
   GuardianForm: { guardianId?: string };
 };

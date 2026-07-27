@@ -2,15 +2,25 @@ import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, Tag } from "../../components";
-import { useDevice } from "../../hooks";
+import { useCrashDetector, useDevice } from "../../hooks";
 import { colors, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
+
+const BLE_STATE_LABEL: Record<string, string> = {
+  disconnected: "NOT PAIRED",
+  scanning: "SCANNING…",
+  connecting: "CONNECTING…",
+  connected: "CONNECTED",
+  error: "CONNECTION ERROR",
+};
 
 export function DeviceScreen() {
   const navigation = useNavigation<AppTabNavigation<"Device">>();
   const { data: device, ensureDevice } = useDevice();
+  const { connectionState, pairedDevice } = useCrashDetector();
 
   const isPaired = device?.pairing_status === "paired";
+  const bleConnected = connectionState === "connected";
 
   const handleCalibrate = async () => {
     if (!device) {
@@ -22,6 +32,23 @@ export function DeviceScreen() {
   return (
     <ScreenBackground scroll contentStyle={styles.content}>
       <Text style={[type.title, styles.title]}>Device</Text>
+
+      <GlassCard>
+        <Text style={[type.kicker, styles.dim]}>BLUETOOTH</Text>
+        <View style={styles.statusRow}>
+          <Text style={[type.title, styles.statusText]}>{BLE_STATE_LABEL[connectionState]}</Text>
+          <Tag label={bleConnected ? "READY" : "ACTION NEEDED"} variant={bleConnected ? "accent" : "neutral"} />
+        </View>
+        {pairedDevice && (
+          <Text style={[type.bodySmall, styles.dim, styles.pairedName]}>{pairedDevice.name}</Text>
+        )}
+        <PillButton
+          title={pairedDevice ? "MANAGE DEVICE" : "PAIR DEVICE"}
+          variant="outline"
+          onPress={() => navigation.navigate("DeviceSetup")}
+          style={styles.pairButton}
+        />
+      </GlassCard>
 
       <GlassCard>
         <Text style={[type.kicker, styles.dim]}>PAIRING STATUS</Text>
@@ -74,6 +101,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   statusText: { color: colors.text },
+  pairedName: { marginTop: spacing.xs },
+  pairButton: { marginTop: spacing.lg },
   offsetRow: { flexDirection: "row", gap: spacing.xl, marginTop: spacing.md },
   offsetItem: { alignItems: "center" },
   offsetLabel: { color: colors.textMuted, fontFamily: type.kicker.fontFamily, fontSize: 11 },

@@ -2,19 +2,30 @@ import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { GlassCard, HoloMotorcycle, ScreenBackground, StatTile } from "../../components";
-import { useCreateIncident, useCurrentSubscription, useDevice, useGuardians, useLocation } from "../../hooks";
+import { useCrashDetector, useCurrentSubscription, useDevice, useGuardians } from "../../hooks";
 import { daysLeft } from "../../hooks/useSubscription";
 import { sensorDataSource, SensorReading } from "../../services/sensors";
 import { colors, fontFamily, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
+
+// Rough scaling so each debug severity button lands roughly where the
+// firmware's own threshold ladder (see firmware/README.md) would place it —
+// not meant to be exact, just plausible enough to exercise every band.
+function mockMetricsForSeverity(severity: number) {
+  return {
+    impact: 15000 + severity * 4500,
+    gyro: 9000 + severity * 3200,
+    tilt: 20 + severity * 9,
+    still: severity >= 3,
+  };
+}
 
 export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: device } = useDevice();
   const { data: guardians } = useGuardians();
   const { data: subscription } = useCurrentSubscription();
-  const { coords } = useLocation();
-  const createIncident = useCreateIncident();
+  const { simulateCrash } = useCrashDetector({ mock: true });
 
   const [reading, setReading] = useState<SensorReading | null>(null);
 
@@ -25,14 +36,12 @@ export function HomeScreen() {
 
   const isLinked = device?.pairing_status === "paired";
 
-  const handleSimulateCrash = async (severity: number) => {
-    const incident = await createIncident.mutateAsync({
-      deviceId: device?.id ?? null,
-      severity,
-      lat: coords.lat,
-      lng: coords.lng,
-    });
-    navigation.navigate("CrashAlert", { incidentId: incident.id, severity, totalSeconds: 30 });
+  // Feeds the mock BLE stream rather than writing an incident directly —
+  // this exercises the exact same app-root listener → CrashAlertScreen →
+  // emergencyPipeline path a real sensor would, just without a physical
+  // crash. See src/services/bluetooth/mockCrashDetectorBle.ts.
+  const handleSimulateCrash = (severity: number) => {
+    simulateCrash?.({ severity: severity as 1 | 2 | 3 | 4 | 5, ...mockMetricsForSeverity(severity) });
   };
 
   return (
@@ -101,7 +110,8 @@ export function HomeScreen() {
       <GlassCard style={styles.debugCard}>
         <Text style={[type.kicker, styles.dimText]}>DEBUG · SIMULATE DEVICE SIGNAL</Text>
         <Text style={[type.bodySmall, styles.debugCopy]}>
-          Tap a severity to simulate a crash signal from the device.
+          Tap a severity to simulate a crash signal from the device. Severity 1 is logged but stays below the
+          alert threshold, so nothing appears on screen — that's expected.
         </Text>
         <View style={styles.severityRow}>
           {[1, 2, 3, 4, 5].map((level) => (
@@ -109,7 +119,6 @@ export function HomeScreen() {
               key={level}
               style={styles.severityButton}
               onPress={() => handleSimulateCrash(level)}
-              disabled={createIncident.isPending}
             >
               <Text style={styles.severityButtonText}>{level}</Text>
             </Pressable>

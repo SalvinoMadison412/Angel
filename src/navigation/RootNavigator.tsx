@@ -1,15 +1,19 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { NavigationContainer, DarkTheme } from "@react-navigation/native";
-import React from "react";
+import { NavigationContainer, DarkTheme, useNavigation } from "@react-navigation/native";
+import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { AppTabs } from "./AppTabs";
 import { AuthNavigator } from "./AuthNavigator";
+import { DeviceSetupScreen } from "../screens/device/DeviceSetupScreen";
 import { CalibrationWizard } from "../screens/device/CalibrationWizard";
 import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
 import { LiveIncidentScreen } from "../screens/incident/LiveIncidentScreen";
 import { GuardianFormScreen } from "../screens/guardians/GuardianFormScreen";
-import { RootStackParamList } from "./types";
+import { RootStackNavigation, RootStackParamList } from "./types";
 import { useAuth } from "../hooks/useAuth";
+import { useCrashDetector } from "../hooks/useCrashDetector";
+import { CrashEvent } from "../services/bluetooth";
+import { DEFAULT_COUNTDOWN_SECONDS, logCrashEventLocally, shouldTriggerAlert } from "../services/emergency";
 import { colors } from "../theme";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -19,15 +23,46 @@ const navTheme = {
   colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, border: colors.divider },
 };
 
+// Listens for crash events from both the real sensor and the mock stream
+// (the Home screen's dev "simulate crash" panel feeds the mock one) and
+// routes severity >= 2 straight to the full-screen alert. Below-threshold
+// events still get logged locally for the calibration work described in
+// firmware/README.md — they just don't interrupt the rider.
+function CrashDetectorListener() {
+  const navigation = useNavigation<RootStackNavigation>();
+  const real = useCrashDetector({ mock: false });
+  const mock = useCrashDetector({ mock: true });
+  const handledReceivedAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    const candidates = [real.lastEvent, mock.lastEvent].filter((e): e is CrashEvent => Boolean(e));
+    const event = candidates.sort((a, b) => b.receivedAt - a.receivedAt)[0];
+    if (!event || handledReceivedAt.current === event.receivedAt) return;
+    handledReceivedAt.current = event.receivedAt;
+
+    if (shouldTriggerAlert(event)) {
+      navigation.navigate("CrashAlert", { ...event, totalSeconds: DEFAULT_COUNTDOWN_SECONDS });
+    } else {
+      logCrashEventLocally(event, "below_threshold");
+    }
+  }, [real.lastEvent, mock.lastEvent, navigation]);
+
+  return null;
+}
+
 function AppNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Tabs" component={AppTabs} />
-      <Stack.Screen name="Calibration" component={CalibrationWizard} />
-      <Stack.Screen name="CrashAlert" component={CrashAlertScreen} options={{ gestureEnabled: false }} />
-      <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
-      <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
-    </Stack.Navigator>
+    <>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Tabs" component={AppTabs} />
+        <Stack.Screen name="DeviceSetup" component={DeviceSetupScreen} />
+        <Stack.Screen name="Calibration" component={CalibrationWizard} />
+        <Stack.Screen name="CrashAlert" component={CrashAlertScreen} options={{ gestureEnabled: false }} />
+        <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
+        <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
+      </Stack.Navigator>
+      <CrashDetectorListener />
+    </>
   );
 }
 

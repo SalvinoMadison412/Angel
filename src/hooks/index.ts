@@ -6,3 +6,4 @@ export * from "./useResponders";
 export * from "./useIncident";
 export * from "./useSubscription";
 export * from "./useLocation";
+export * from "./useCrashDetector";

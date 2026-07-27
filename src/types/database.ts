@@ -51,6 +51,13 @@ export interface Incident {
   user_id: string;
   device_id: string | null;
   severity: number;
+  // Raw sensor metrics behind the severity score — see firmware/README.md.
+  // Kept alongside the derived severity so a future recalibration of the
+  // threshold ladder doesn't need to re-collect data.
+  impact: number | null;
+  gyro: number | null;
+  tilt: number | null;
+  still: boolean | null;
   status: IncidentStatus;
   lat: number | null;
   lng: number | null;

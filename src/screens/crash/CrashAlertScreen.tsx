@@ -3,8 +3,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
-import { useAssignResponder, useCancelIncident, useGuardians, useIncident, useLocation, useResponders } from "../../hooks";
+import { useAssignResponder, useAuth, useDevice, useGuardians, useResponders } from "../../hooks";
 import { responderTypesForSeverity } from "../../hooks/useResponders";
+import { cancelCrashEvent, confirmIncident } from "../../services/emergency";
 import { notificationService } from "../../services/notifications";
 import { etaMinutes, haversineKm } from "../../lib/geo";
 import { colors, severityColor, spacing, type } from "../../theme";
@@ -22,13 +23,16 @@ const SEVERITY_LABELS: Record<number, string> = {
 export function CrashAlertScreen() {
   const navigation = useNavigation<RootStackNavigation>();
   const route = useRoute<RouteProp<RootStackParamList, "CrashAlert">>();
-  const { incidentId, severity, totalSeconds } = route.params;
+  const { severity, impact, gyro, tilt, still, receivedAt, totalSeconds } = route.params;
+  const event = useMemo(
+    () => ({ severity, impact, gyro, tilt, still, receivedAt }),
+    [severity, impact, gyro, tilt, still, receivedAt]
+  );
 
-  const { data: incident } = useIncident(incidentId);
+  const { session } = useAuth();
+  const { data: device } = useDevice();
   const { data: guardians } = useGuardians();
   const { data: responders } = useResponders(responderTypesForSeverity(severity));
-  const { coords } = useLocation();
-  const cancelIncident = useCancelIncident();
   const assignResponder = useAssignResponder();
   const insets = useSafeAreaInsets();
 
@@ -37,35 +41,43 @@ export function CrashAlertScreen() {
   const resolvedRef = useRef(false);
 
   const detectedAt = useMemo(
-    () => new Date(incident?.created_at ?? Date.now()).toLocaleTimeString("en-IN", { hour12: false }),
-    [incident?.created_at]
+    () => new Date(receivedAt).toLocaleTimeString("en-IN", { hour12: false }),
+    [receivedAt]
   );
-  const impactG = useMemo(() => (1.4 + severity * 1.3 + Math.random() * 0.4).toFixed(1), [severity]);
-  const leanDeg = useMemo(() => Math.round(18 + severity * 13 + Math.random() * 6), [severity]);
 
   const dispatch = async () => {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
     setResolving(true);
 
-    await notificationService.logEvent(incidentId, "Crash confirmed — countdown expired");
-    if (incident) {
-      await notificationService.notifyGuardians(incident, guardians ?? []);
+    if (!session?.user.id) {
+      // Shouldn't happen — this screen only exists behind an authenticated
+      // session — but bail safely rather than writing an orphaned incident.
+      setResolving(false);
+      resolvedRef.current = false;
+      return;
     }
 
+    const incident = await confirmIncident({
+      event,
+      userId: session.user.id,
+      deviceId: device?.id ?? null,
+      guardians: guardians ?? [],
+    });
+
     const nearest = (responders ?? [])
-      .map((r) => ({ r, distanceKm: haversineKm(coords, { lat: r.lat, lng: r.lng }) }))
+      .map((r) => ({ r, distanceKm: haversineKm({ lat: incident.lat ?? 0, lng: incident.lng ?? 0 }, { lat: r.lat, lng: r.lng }) }))
       .sort((a, b) => a.distanceKm - b.distanceKm)[0];
 
     if (nearest) {
-      await assignResponder.mutateAsync({ incidentId, responderId: nearest.r.id });
+      await assignResponder.mutateAsync({ incidentId: incident.id, responderId: nearest.r.id });
       await notificationService.logEvent(
-        incidentId,
+        incident.id,
         `Nearest partner accepted, ${nearest.distanceKm.toFixed(1)} km out · ETA ${etaMinutes(nearest.distanceKm)} min`
       );
     }
 
-    navigation.replace("LiveIncident", { incidentId });
+    navigation.replace("LiveIncident", { incidentId: incident.id });
   };
 
   useEffect(() => {
@@ -90,7 +102,7 @@ export function CrashAlertScreen() {
   const handleCancel = async () => {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
-    await cancelIncident.mutateAsync(incidentId);
+    await cancelCrashEvent(event);
     navigation.goBack();
   };
 
@@ -112,7 +124,11 @@ export function CrashAlertScreen() {
           </View>
           <SeverityMeter severity={severity} />
           <Text style={[type.label, styles.metaRow]}>
-            LEVEL {severity} / 5   IMPACT {impactG} G   LEAN {leanDeg}°
+            IMPACT {impact.toFixed(0)}   GYRO {gyro.toFixed(0)}   TILT {tilt.toFixed(0)}°{still ? "   STILL" : ""}
+          </Text>
+          <Text style={[type.bodySmall, styles.caveat]}>
+            Severity is a rough 1-5 triage signal from on-device thresholds, not a precise or medically validated
+            score.
           </Text>
         </View>
 
@@ -161,6 +177,7 @@ const styles = StyleSheet.create({
   severityHeaderRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.md },
   dim: { color: colors.textDim },
   metaRow: { color: colors.textMuted, marginTop: spacing.md },
+  caveat: { color: colors.textDim, marginTop: spacing.sm },
   countdownWrap: { marginTop: spacing.lg },
   copy: { color: colors.textMuted, textAlign: "center", paddingHorizontal: spacing.lg },
   chipRow: { flexDirection: "row", gap: spacing.sm },

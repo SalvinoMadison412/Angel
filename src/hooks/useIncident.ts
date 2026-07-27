@@ -1,37 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "../lib/supabase";
-import { useAuth } from "./useAuth";
 import { Incident, IncidentEvent } from "../types/database";
-
-export function useCreateIncident() {
-  const { session } = useAuth();
-  const userId = session?.user.id;
-
-  return useMutation({
-    mutationFn: async (input: {
-      deviceId: string | null;
-      severity: number;
-      lat: number;
-      lng: number;
-    }): Promise<Incident> => {
-      const { data, error } = await supabase
-        .from("incidents")
-        .insert({
-          user_id: userId,
-          device_id: input.deviceId,
-          severity: input.severity,
-          lat: input.lat,
-          lng: input.lng,
-          status: "active",
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-  });
-}
 
 export function useIncident(incidentId: string | undefined) {
   const queryClient = useQueryClient();
