@@ -8,10 +8,12 @@ import { AuthStackNavigation } from "../../navigation/types";
 
 export function PhoneEntryScreen() {
   const navigation = useNavigation<AuthStackNavigation>();
-  const { sendOtp } = useAuth();
+  const { sendOtp, signInWithGoogle } = useAuth();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   const digits = phone.replace(/\D/g, "");
   const canSubmit = digits.length === 10;
@@ -30,6 +32,16 @@ export function PhoneEntryScreen() {
     navigation.navigate("Otp", { phone: fullPhone });
   };
 
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setGoogleError(null);
+    const { error: googleSignInError } = await signInWithGoogle();
+    setGoogleLoading(false);
+    // On success the session updates and RootNavigator swaps to the app
+    // stack on its own — there's nothing to navigate to here.
+    if (googleSignInError) setGoogleError(googleSignInError);
+  };
+
   return (
     <ScreenBackground scroll contentStyle={styles.content}>
       <Text style={[type.wordmark, styles.wordmark]}>ANGEL</Text>
@@ -40,6 +52,21 @@ export function PhoneEntryScreen() {
 
       <View style={styles.motif}>
         <HoloMotorcycle dim width={260} height={140} />
+      </View>
+
+      <PillButton
+        title="CONTINUE WITH GOOGLE"
+        variant="outline"
+        onPress={handleGoogleSignIn}
+        loading={googleLoading}
+        style={styles.googleButton}
+      />
+      {googleError ? <Text style={styles.error}>{googleError}</Text> : null}
+
+      <View style={styles.dividerRow}>
+        <View style={styles.dividerLine} />
+        <Text style={[type.kicker, styles.dividerText]}>OR</Text>
+        <View style={styles.dividerLine} />
       </View>
 
       <GlassCard style={styles.formCard}>
@@ -93,6 +120,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   motif: { marginVertical: spacing.xxxl },
+  googleButton: { width: "100%" },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    width: "100%",
+    marginVertical: spacing.xl,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.glassBorder },
+  dividerText: { color: colors.textDim },
   formCard: { width: "100%" },
   fieldLabel: { color: colors.textDim, marginBottom: spacing.md },
   phoneRow: { flexDirection: "row", gap: spacing.md },
