@@ -5,8 +5,10 @@ Arduino sketch for the ESP32-based crash sensor. Lives in
 
 ## Hardware
 
-- ESP32 dev board (any board supported by `ArduinoBLE` + the ESP32 Arduino core)
-- MPU6050 accelerometer/gyroscope on I2C (SDA/SCL to the board's default I2C pins)
+- Arduino Nano ESP32 (or any board supported by `ArduinoBLE` + the ESP32
+  Arduino core)
+- BMI160 accelerometer/gyroscope on I2C (SDA/SCL to the board's default I2C
+  pins), address `0x68` (SDO tied low)
 
 ## Libraries
 
@@ -14,8 +16,10 @@ Install via the Arduino Library Manager:
 
 - `ArduinoBLE`
 
-`Wire` ships with the Arduino core. The MPU6050 is read via raw I2C register
-access (no sensor library dependency).
+`Wire` ships with the Arduino core. The BMI160 is read via raw I2C register
+access (no sensor library dependency) — see the comment above `imuInit()`
+in the sketch for why it needs an explicit power-mode-normal command and a
+startup delay that a simpler chip like the MPU6050 wouldn't.
 
 ## BLE contract
 
@@ -81,9 +85,15 @@ the raw metrics.
 
 ## Flashing
 
-1. Arduino IDE → Board Manager → install the ESP32 core if you haven't.
-2. Select your ESP32 board + port.
+1. Arduino IDE → Boards Manager → install **"Arduino ESP32 Boards"** (the
+   official Arduino package — this is what makes `ArduinoBLE` work on this
+   board; the community `esp32` core is a different package and isn't what
+   this depends on).
+2. Tools → Board → select **Arduino Nano ESP32**, then select the port.
 3. Install `ArduinoBLE` via Library Manager.
 4. Open `CrashDetector.ino`, upload.
-5. Open the Serial Monitor at 115200 baud to see impact triggers and sent
-   payloads while testing.
+5. Open the Serial Monitor at 115200 baud. On boot you should see
+   `CrashDetector advertising as "CrashDetector"` and no `[imu] warning:
+   unexpected CHIP_ID` line — if you do see that warning, double check the
+   BMI160's wiring/address before trusting any readings. Impact triggers
+   and sent payloads log here too while testing.

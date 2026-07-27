@@ -1,6 +1,6 @@
-// Angel CrashDetector — ESP32 firmware
+// Angel CrashDetector — Arduino Nano ESP32 firmware
 //
-// Reads an MPU6050 accelerometer/gyroscope over I2C, watches for an impact
+// Reads a BMI160 accelerometer/gyroscope over I2C, watches for an impact
 // spike, and — only when one is detected — pushes a single BLE notification
 // with a JSON crash event. This is NOT a continuous telemetry stream: BLE
 // central apps should expect long silent stretches punctuated by rare
@@ -34,44 +34,90 @@ BLEService crashService(CRASH_SERVICE_UUID);
 BLEStringCharacteristic crashChar(CRASH_CHARACTERISTIC_UUID, BLERead | BLENotify, PAYLOAD_MAX_LEN);
 
 // ───────────────────────────────────────────────────────────────────────
-// MPU6050 — raw register access (no external sensor library dependency).
-// Default I2C address, default full-scale ranges (±2g / ±250 dps).
+// BMI160 — raw register access (no external sensor library dependency).
+// Default I2C address (SDO tied low). Explicitly configured to ±2g /
+// ±2000 dps rather than relying on power-on-reset defaults.
+//
+// Unlike the MPU6050, the BMI160 boots into a low-power suspend state:
+// the accelerometer and gyroscope each need an explicit "set PMU mode
+// normal" command before they report real data, and the gyro in
+// particular needs on the order of tens of milliseconds to start up.
+// Skipping that wait is the most common reason a BMI160 port reads all
+// zeros or garbage.
 // ───────────────────────────────────────────────────────────────────────
-static const uint8_t MPU_ADDR = 0x68;
-static const uint8_t REG_PWR_MGMT_1 = 0x6B;
-static const uint8_t REG_ACCEL_XOUT_H = 0x3B;
+static const uint8_t BMI_ADDR = 0x68;
+static const uint8_t REG_CHIP_ID = 0x00;
+static const uint8_t REG_GYR_DATA = 0x0C;   // burst read from here: gyro xyz, then accel xyz
+static const uint8_t REG_ACC_CONF = 0x40;
+static const uint8_t REG_ACC_RANGE = 0x41;
+static const uint8_t REG_GYR_CONF = 0x42;
+static const uint8_t REG_GYR_RANGE = 0x43;
+static const uint8_t REG_CMD = 0x7E;
+static const uint8_t CHIP_ID_EXPECTED = 0xD1;
+static const uint8_t CMD_ACC_NORMAL_MODE = 0x11;
+static const uint8_t CMD_GYR_NORMAL_MODE = 0x15;
 
 struct ImuSample {
   float ax, ay, az; // raw LSB counts, not converted to g — see severity note below
   float gx, gy, gz; // raw LSB counts, not converted to deg/s
 };
 
-void mpuInit() {
-  Wire.begin();
-  Wire.beginTransmission(MPU_ADDR);
-  Wire.write(REG_PWR_MGMT_1);
-  Wire.write(0x00); // wake the sensor up out of sleep mode
+void bmiWriteReg(uint8_t reg, uint8_t value) {
+  Wire.beginTransmission(BMI_ADDR);
+  Wire.write(reg);
+  Wire.write(value);
   Wire.endTransmission(true);
 }
 
-bool mpuRead(ImuSample &out) {
-  Wire.beginTransmission(MPU_ADDR);
-  Wire.write(REG_ACCEL_XOUT_H);
+void imuInit() {
+  Wire.begin();
+  delay(10); // let the sensor's own power-on-reset settle before talking to it
+
+  Wire.beginTransmission(BMI_ADDR);
+  Wire.write(REG_CHIP_ID);
+  Wire.endTransmission(false);
+  Wire.requestFrom(BMI_ADDR, (uint8_t)1);
+  uint8_t chipId = Wire.available() ? Wire.read() : 0x00;
+  if (chipId != CHIP_ID_EXPECTED) {
+    Serial.print("[imu] warning: unexpected CHIP_ID 0x");
+    Serial.println(chipId, HEX);
+  }
+
+  bmiWriteReg(REG_ACC_RANGE, 0x03); // ±2g
+  bmiWriteReg(REG_ACC_CONF, 0x28);  // normal filter, 100 Hz output data rate
+  bmiWriteReg(REG_GYR_RANGE, 0x00); // ±2000 dps
+  bmiWriteReg(REG_GYR_CONF, 0x28);  // normal filter, 100 Hz output data rate
+
+  bmiWriteReg(REG_CMD, CMD_ACC_NORMAL_MODE);
+  delay(5); // accel normal-mode startup, ~3.8ms typical
+
+  bmiWriteReg(REG_CMD, CMD_GYR_NORMAL_MODE);
+  delay(80); // gyro normal-mode startup, up to ~80ms — the step MPU6050 code doesn't need
+}
+
+bool imuRead(ImuSample &out) {
+  Wire.beginTransmission(BMI_ADDR);
+  Wire.write(REG_GYR_DATA);
   if (Wire.endTransmission(false) != 0) return false;
 
-  const uint8_t bytesToRead = 14; // accel(6) + temp(2) + gyro(6)
-  if (Wire.requestFrom(MPU_ADDR, bytesToRead) != bytesToRead) return false;
+  const uint8_t bytesToRead = 12; // gyro(6) + accel(6)
+  if (Wire.requestFrom(BMI_ADDR, bytesToRead) != bytesToRead) return false;
 
-  int16_t rawAx = (Wire.read() << 8) | Wire.read();
-  int16_t rawAy = (Wire.read() << 8) | Wire.read();
-  int16_t rawAz = (Wire.read() << 8) | Wire.read();
-  Wire.read(); Wire.read(); // discard temperature
-  int16_t rawGx = (Wire.read() << 8) | Wire.read();
-  int16_t rawGy = (Wire.read() << 8) | Wire.read();
-  int16_t rawGz = (Wire.read() << 8) | Wire.read();
+  // BMI160 registers are little-endian (low byte first) — the reverse of
+  // the MPU6050's big-endian layout.
+  uint8_t gxl = Wire.read(), gxh = Wire.read();
+  uint8_t gyl = Wire.read(), gyh = Wire.read();
+  uint8_t gzl = Wire.read(), gzh = Wire.read();
+  uint8_t axl = Wire.read(), axh = Wire.read();
+  uint8_t ayl = Wire.read(), ayh = Wire.read();
+  uint8_t azl = Wire.read(), azh = Wire.read();
 
-  out.ax = rawAx; out.ay = rawAy; out.az = rawAz;
-  out.gx = rawGx; out.gy = rawGy; out.gz = rawGz;
+  out.gx = (int16_t)((gxh << 8) | gxl);
+  out.gy = (int16_t)((gyh << 8) | gyl);
+  out.gz = (int16_t)((gzh << 8) | gzl);
+  out.ax = (int16_t)((axh << 8) | axl);
+  out.ay = (int16_t)((ayh << 8) | ayl);
+  out.az = (int16_t)((azh << 8) | azl);
   return true;
 }
 
@@ -97,6 +143,11 @@ float tiltFromVertical(const ImuSample &s) {
 // tuples + human-labeled ground truth, fit an ordinal classifier, keep
 // these on-device thresholds only as a cheap pre-filter that decides
 // whether to wake BLE at all).
+//
+// These numbers implicitly assume the ±2g / ±2000 dps ranges configured in
+// imuInit() above — if you change either range, these thresholds are
+// scaled wrong until re-tuned (roughly linearly: e.g. switching gyro range
+// to ±1000 dps would double the raw counts for the same physical rotation).
 // ───────────────────────────────────────────────────────────────────────
 static const float IMPACT_TRIGGER = 20000.0f; // raw accel-magnitude deviation that starts an impact window
 static const float IMPACT_LOW = 24000.0f;
@@ -158,7 +209,7 @@ void sendCrashEvent(int severity, float impact, float gyro, float tilt, bool sti
 
 void setup() {
   Serial.begin(115200);
-  mpuInit();
+  imuInit();
 
   if (!BLE.begin()) {
     Serial.println("BLE init failed — halting");
@@ -186,7 +237,7 @@ void loop() {
   BLE.poll();
 
   ImuSample sample;
-  if (!mpuRead(sample)) return;
+  if (!imuRead(sample)) return;
 
   float accelMag = vecMag(sample.ax, sample.ay, sample.az);
   float gyroMag = vecMag(sample.gx, sample.gy, sample.gz);

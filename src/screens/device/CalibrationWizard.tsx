@@ -84,7 +84,7 @@ export function CalibrationWizard() {
 
           <GlassCard style={styles.dialCard}>
             <View style={styles.dialHeader}>
-              <Text style={[type.kicker, styles.dim]}>GYRO // IMU-6050</Text>
+              <Text style={[type.kicker, styles.dim]}>GYRO // BMI160</Text>
               <Text style={[type.kicker, zeroed ? styles.zeroedText : styles.dim]}>
                 {zeroed ? "ZEROED" : calibrating ? "SAMPLING…" : "AWAITING ZERO"}
               </Text>
