@@ -1,6 +1,7 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { BackHandler, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
 import { useAssignResponder, useCancelIncident, useGuardians, useIncident, useLocation, useResponders } from "../../hooks";
 import { responderTypesForSeverity } from "../../hooks/useResponders";
@@ -29,6 +30,7 @@ export function CrashAlertScreen() {
   const { coords } = useLocation();
   const cancelIncident = useCancelIncident();
   const assignResponder = useAssignResponder();
+  const insets = useSafeAreaInsets();
 
   const [secondsLeft, setSecondsLeft] = useState(totalSeconds);
   const [resolving, setResolving] = useState(false);
@@ -76,6 +78,15 @@ export function CrashAlertScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft]);
 
+  // `gestureEnabled: false` on this screen's stack options only blocks iOS's
+  // swipe-back gesture — Android's hardware/gesture back button is a
+  // separate input path and isn't covered by it. Block it too, so the
+  // alert can only be dismissed via the cancel/dispatch buttons.
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+    return () => subscription.remove();
+  }, []);
+
   const handleCancel = async () => {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
@@ -88,7 +99,7 @@ export function CrashAlertScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}>
         <Text style={styles.topBarText}>⚠ CRASH DETECTED</Text>
         <Text style={styles.topBarTime}>{detectedAt}</Text>
       </View>
@@ -137,7 +148,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   topBar: {
     backgroundColor: colors.accent,
-    paddingTop: 54,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
     flexDirection: "row",

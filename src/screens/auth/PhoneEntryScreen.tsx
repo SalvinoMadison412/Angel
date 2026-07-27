@@ -84,6 +84,7 @@ export function PhoneEntryScreen() {
             keyboardType="number-pad"
             style={styles.phoneInput}
             maxLength={10}
+            underlineColorAndroid="transparent"
           />
         </View>
         <View style={styles.metaRow}>

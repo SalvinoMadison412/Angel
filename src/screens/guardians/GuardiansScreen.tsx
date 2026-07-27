@@ -45,10 +45,10 @@ export function GuardiansScreen() {
               </View>
               <View style={styles.handle}>
                 <Pressable onPress={() => move(index, -1)} hitSlop={8}>
-                  <Text style={styles.handleArrow}>︿</Text>
+                  <Text style={styles.handleArrow}>▲</Text>
                 </Pressable>
                 <Pressable onPress={() => move(index, 1)} hitSlop={8}>
-                  <Text style={styles.handleArrow}>﹀</Text>
+                  <Text style={styles.handleArrow}>▼</Text>
                 </Pressable>
               </View>
             </View>

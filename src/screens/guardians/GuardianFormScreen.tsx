@@ -118,6 +118,7 @@ function Field({
         placeholderTextColor={colors.textDim}
         keyboardType={keyboardType}
         style={styles.input}
+        underlineColorAndroid="transparent"
       />
     </View>
   );
