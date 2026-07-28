@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { GlassCard, HoloMotorcycle, ScreenBackground, StatTile } from "../../components";
-import { useCrashDetector, useCurrentSubscription, useDevice, useGuardians } from "../../hooks";
+import { useCrashDetector, useCurrentSubscription, useGuardians } from "../../hooks";
 import { daysLeft } from "../../hooks/useSubscription";
 import { CrashEvent, impactToGForce } from "../../services/bluetooth";
 import { colors, fontFamily, spacing, type } from "../../theme";
@@ -52,13 +52,15 @@ function leanTile(lastEvent: CrashEvent | null, connected: boolean): ReadingTile
 
 export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
-  const { data: device } = useDevice();
   const { data: guardians } = useGuardians();
   const { data: subscription } = useCurrentSubscription();
   const { connectionState, lastEvent } = useCrashDetector();
   const { simulateCrash } = useCrashDetector({ mock: true });
 
-  const isLinked = device?.pairing_status === "paired";
+  // Driven by the live BLE connection state, not the device row's persisted
+  // `pairing_status` — that flag reflects setup history and goes stale the
+  // moment the sensor actually disconnects, which is exactly the bug this
+  // badge exists to avoid.
   const isConnected = connectionState === "connected";
 
   const gTile = gForceTile(lastEvent, isConnected);
@@ -79,9 +81,9 @@ export function HomeScreen() {
     <ScreenBackground scroll contentStyle={styles.content}>
       <View style={styles.headerRow}>
         <Text style={[type.wordmark, styles.wordmark]}>ANGEL</Text>
-        <View style={[styles.statusPill, isLinked ? styles.statusPillOn : styles.statusPillOff]}>
-          <View style={[styles.statusDot, { backgroundColor: isLinked ? colors.success : colors.textDim }]} />
-          <Text style={[type.kicker, styles.statusText]}>{isLinked ? "DEVICE LINKED" : "DEVICE NOT PAIRED"}</Text>
+        <View style={[styles.statusPill, isConnected ? styles.statusPillOn : styles.statusPillOff]}>
+          <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.textDim }]} />
+          <Text style={[type.kicker, styles.statusText]}>{isConnected ? "DEVICE CONNECTED" : "DEVICE NOT CONNECTED"}</Text>
         </View>
       </View>
 

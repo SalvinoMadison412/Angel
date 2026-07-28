@@ -7,7 +7,7 @@ import { colors, radius, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
 
 const BLE_STATE_LABEL: Record<string, string> = {
-  disconnected: "NOT PAIRED",
+  disconnected: "NOT CONNECTED",
   scanning: "SCANNING…",
   connecting: "CONNECTING…",
   connected: "CONNECTED",
@@ -19,7 +19,6 @@ export function DeviceScreen() {
   const { data: device, ensureDevice, saveBikeInfo } = useDevice();
   const { connectionState, pairedDevice } = useCrashDetector();
 
-  const isPaired = device?.pairing_status === "paired";
   const bleConnected = connectionState === "connected";
 
   const [bikeMake, setBikeMake] = useState("");
@@ -54,11 +53,11 @@ export function DeviceScreen() {
           <Text style={[type.title, styles.statusText]}>{BLE_STATE_LABEL[connectionState]}</Text>
           <Tag label={bleConnected ? "READY" : "ACTION NEEDED"} variant={bleConnected ? "accent" : "neutral"} />
         </View>
-        {pairedDevice && (
+        {bleConnected && pairedDevice && (
           <Text style={[type.bodySmall, styles.dim, styles.pairedName]}>{pairedDevice.name}</Text>
         )}
         <PillButton
-          title={pairedDevice ? "MANAGE DEVICE" : "PAIR DEVICE"}
+          title={bleConnected ? "MANAGE DEVICE" : "PAIR DEVICE"}
           variant="outline"
           onPress={() => navigation.navigate("DeviceSetup")}
           style={styles.pairButton}
@@ -118,16 +117,6 @@ export function DeviceScreen() {
       </GlassCard>
 
       <GlassCard>
-        <Text style={[type.kicker, styles.dim]}>PAIRING STATUS</Text>
-        <View style={styles.statusRow}>
-          <Text style={[type.title, styles.statusText]}>
-            {isPaired ? "PAIRED" : device?.pairing_status === "pairing" ? "PAIRING" : "NOT PAIRED"}
-          </Text>
-          <Tag label={isPaired ? "READY" : "ACTION NEEDED"} variant={isPaired ? "accent" : "neutral"} />
-        </View>
-      </GlassCard>
-
-      <GlassCard>
         <Text style={[type.kicker, styles.dim]}>CALIBRATION OFFSETS</Text>
         <View style={styles.offsetRow}>
           <OffsetStat label="X" value={device?.calibration_offset_x ?? 0} />
@@ -140,7 +129,7 @@ export function DeviceScreen() {
       </GlassCard>
 
       <PillButton
-        title={isPaired ? "RE-CALIBRATE" : "PAIR & CALIBRATE"}
+        title={device?.pairing_status === "paired" ? "RE-CALIBRATE" : "PAIR & CALIBRATE"}
         onPress={handleCalibrate}
         loading={ensureDevice.isPending}
       />

@@ -7,7 +7,7 @@ import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation } from "../../navigation/types";
 
 const STATE_LABEL: Record<string, string> = {
-  disconnected: "NOT PAIRED",
+  disconnected: "NOT CONNECTED",
   scanning: "SCANNING…",
   connecting: "CONNECTING…",
   connected: "CONNECTED",
