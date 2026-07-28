@@ -2,7 +2,7 @@ import { File, Paths } from "expo-file-system";
 import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { CrashEvent } from "../bluetooth";
-import { notificationService } from "../notifications";
+import { MedicalSnapshot, notificationService } from "../notifications";
 import { Guardian, Incident } from "../../types/database";
 
 export const DEFAULT_COUNTDOWN_SECONDS = 10;
@@ -89,7 +89,23 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
   if (error) throw error;
 
   const incident = data as Incident;
-  await notificationService.notifyGuardians(incident, guardians);
+
+  let medicalInfo: MedicalSnapshot = null;
+  try {
+    const { data: emergencyProfile, error: profileError } = await supabase
+      .from("emergency_profiles")
+      .select("full_name, blood_group, medical_conditions")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    medicalInfo = emergencyProfile;
+  } catch (err) {
+    // A confirmed crash must still notify guardians even if the medical
+    // lookup fails — this is enrichment, not a precondition for the alert.
+    console.warn("[emergency] failed to load emergency profile for notification", err);
+  }
+
+  await notificationService.notifyGuardians(incident, guardians, medicalInfo);
   return incident;
 }
 

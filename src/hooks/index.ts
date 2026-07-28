@@ -7,3 +7,4 @@ export * from "./useIncident";
 export * from "./useSubscription";
 export * from "./useLocation";
 export * from "./useCrashDetector";
+export * from "./useEmergencyProfile";

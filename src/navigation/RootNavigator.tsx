@@ -1,9 +1,12 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { NavigationContainer, DarkTheme, useNavigation } from "@react-navigation/native";
-import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, Animated, StyleSheet } from "react-native";
 import { AppTabs } from "./AppTabs";
 import { AuthNavigator } from "./AuthNavigator";
+import { AnimatedSplash } from "../components";
+import { OnboardingScreen } from "../screens/onboarding/OnboardingScreen";
+import { EmergencyProfileScreen } from "../screens/profile/EmergencyProfileScreen";
 import { DeviceSetupScreen } from "../screens/device/DeviceSetupScreen";
 import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
 import { CalibrationWizard } from "../screens/device/CalibrationWizard";
@@ -14,9 +17,20 @@ import { RootStackNavigation, RootStackParamList } from "./types";
 import { useAuth } from "../hooks/useAuth";
 import { useCrashDetector } from "../hooks/useCrashDetector";
 import { useDevice } from "../hooks/useDevice";
+import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
 import { DEFAULT_COUNTDOWN_SECONDS, logCrashEventLocally, shouldTriggerAlert } from "../services/emergency";
 import { colors } from "../theme";
+
+// The animation's own on-screen time — kept in sync with AnimatedSplash's
+// internal timeline (ring + trace draw-in, then a small settle pulse).
+const SPLASH_MIN_DURATION_MS = 1300;
+const SPLASH_REDUCED_MOTION_DURATION_MS = 200;
+// If auth is still resolving once the animation's minimum duration is up,
+// wait a little longer rather than cutting the splash short — but capped,
+// so a slow network doesn't turn a 1.3s splash into an open-ended wait.
+const SPLASH_AUTH_GRACE_MS = 400;
+const SPLASH_FADE_MS = 250;
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -73,6 +87,7 @@ function AppNavigator() {
         <Stack.Screen name="CrashAlert" component={CrashAlertScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
+        <Stack.Screen name="EmergencyProfile" component={EmergencyProfileScreen} />
       </Stack.Navigator>
       <CrashDetectorListener />
     </>
@@ -81,18 +96,69 @@ function AppNavigator() {
 
 export function RootNavigator() {
   const { session, initializing } = useAuth();
+  const profile = useProfile();
 
-  if (initializing) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
-  }
+  // `null` until we know — the min-duration timer waits for this so it
+  // never starts counting against the wrong duration.
+  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  const [minDurationElapsed, setMinDurationElapsed] = useState(false);
+  const [authGraceExpired, setAuthGraceExpired] = useState(false);
+  const [splashUnmounted, setSplashUnmounted] = useState(false);
+  const splashOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => mounted && setReduceMotion(enabled))
+      .catch(() => mounted && setReduceMotion(false));
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion === null) return;
+    const duration = reduceMotion ? SPLASH_REDUCED_MOTION_DURATION_MS : SPLASH_MIN_DURATION_MS;
+    const timer = setTimeout(() => setMinDurationElapsed(true), duration);
+    return () => clearTimeout(timer);
+  }, [reduceMotion]);
+
+  // Not signed in yet (auth resolving) or signed in but the profile row
+  // hasn't loaded yet — either way we don't know which of Auth/Onboarding/
+  // App to show, so this counts the same as "still resolving" for the
+  // splash gate.
+  const stillResolving = initializing || (Boolean(session) && profile.isLoading);
+
+  useEffect(() => {
+    // Concurrent with the animation, not after it — this only ever adds
+    // waiting time if resolving is the slower of the two, and even then
+    // only up to the capped grace window.
+    if (!minDurationElapsed || !stillResolving) return;
+    const timer = setTimeout(() => setAuthGraceExpired(true), SPLASH_AUTH_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [minDurationElapsed, stillResolving]);
+
+  const showSplash = !minDurationElapsed || (stillResolving && !authGraceExpired);
+
+  useEffect(() => {
+    if (showSplash || splashUnmounted) return;
+    Animated.timing(splashOpacity, {
+      toValue: 0,
+      duration: SPLASH_FADE_MS,
+      useNativeDriver: true,
+    }).start(() => setSplashUnmounted(true));
+  }, [showSplash, splashUnmounted, splashOpacity]);
+
+  const needsOnboarding = Boolean(session) && Boolean(profile.data) && !profile.data?.onboarding_completed;
 
   return (
     <NavigationContainer theme={navTheme}>
-      {session ? <AppNavigator /> : <AuthNavigator />}
+      {!session ? <AuthNavigator /> : needsOnboarding ? <OnboardingScreen /> : <AppNavigator />}
+      {!splashUnmounted && (
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
+          <AnimatedSplash reduceMotion={!!reduceMotion} />
+        </Animated.View>
+      )}
     </NavigationContainer>
   );
 }

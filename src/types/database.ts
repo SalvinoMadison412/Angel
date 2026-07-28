@@ -3,6 +3,7 @@ export type IncidentStatus = "active" | "cancelled" | "resolved";
 export type ResponderType = "gig_partner" | "auto" | "car_uber";
 export type AlertMode = "call" | "sms";
 export type SubscriptionTier = 3 | 6 | 12;
+export type BloodGroup = "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-";
 
 export interface Profile {
   id: string;
@@ -10,6 +11,12 @@ export interface Profile {
   phone: string | null;
   subscription_tier: SubscriptionTier | null;
   subscription_expiry: string | null;
+  onboarding_completed: boolean;
+  // 1-indexed step to resume onboarding on — see EmergencyProfile/Guardian/
+  // Device for what's actually collected at each step. Not inferred from
+  // field emptiness: an empty field can mean "not reached yet" or
+  // "explicitly skipped," which need to resume differently.
+  onboarding_step: number;
   created_at: string;
 }
 
@@ -26,7 +33,25 @@ export interface Device {
   // degrees from the sensor's raw axis, not from the bike's actual resting
   // angle, and shouldn't be trusted.
   calibrated: boolean;
+  bike_make: string | null;
+  bike_model: string | null;
   created_at: string;
+}
+
+// Sensitive identity/medical data collected during onboarding — kept in its
+// own table (not bolted onto Profile) with RLS scoped tightly to user_id.
+// Only ever read by: the owning user (Settings/onboarding) and the
+// emergency pipeline at the moment of a confirmed crash — see
+// emergencyPipeline.confirmIncident.
+export interface EmergencyProfile {
+  id: string;
+  user_id: string;
+  full_name: string | null;
+  date_of_birth: string | null;
+  blood_group: BloodGroup | null;
+  medical_conditions: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Guardian {

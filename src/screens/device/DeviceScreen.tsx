@@ -1,9 +1,9 @@
 import { useNavigation } from "@react-navigation/native";
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, Tag } from "../../components";
 import { useCrashDetector, useDevice } from "../../hooks";
-import { colors, spacing, type } from "../../theme";
+import { colors, radius, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
 
 const BLE_STATE_LABEL: Record<string, string> = {
@@ -16,11 +16,26 @@ const BLE_STATE_LABEL: Record<string, string> = {
 
 export function DeviceScreen() {
   const navigation = useNavigation<AppTabNavigation<"Device">>();
-  const { data: device, ensureDevice } = useDevice();
+  const { data: device, ensureDevice, saveBikeInfo } = useDevice();
   const { connectionState, pairedDevice } = useCrashDetector();
 
   const isPaired = device?.pairing_status === "paired";
   const bleConnected = connectionState === "connected";
+
+  const [bikeMake, setBikeMake] = useState("");
+  const [bikeModel, setBikeModel] = useState("");
+  const bikeInitialized = useRef(false);
+
+  useEffect(() => {
+    if (bikeInitialized.current || !device) return;
+    bikeInitialized.current = true;
+    setBikeMake(device.bike_make ?? "");
+    setBikeModel(device.bike_model ?? "");
+  }, [device]);
+
+  const handleSaveBike = () => {
+    saveBikeInfo.mutate({ bikeMake: bikeMake.trim() || null, bikeModel: bikeModel.trim() || null });
+  };
 
   const handleCalibrate = async () => {
     if (!device) {
@@ -68,6 +83,36 @@ export function DeviceScreen() {
           title={device?.calibrated ? "RECALIBRATE SENSOR" : "CALIBRATE SENSOR"}
           variant="outline"
           onPress={() => navigation.navigate("CalibrateSensor")}
+          style={styles.pairButton}
+        />
+      </GlassCard>
+
+      <GlassCard>
+        <Text style={[type.kicker, styles.dim]}>BIKE</Text>
+        <Text style={[type.bodySmall, styles.hint, styles.bikeHint]}>
+          Links this bike to whichever sensor you pair — purely organizational.
+        </Text>
+        <TextInput
+          value={bikeMake}
+          onChangeText={setBikeMake}
+          placeholder="Make (e.g. Honda)"
+          placeholderTextColor={colors.textDim}
+          style={[styles.input, styles.fieldSpacing]}
+          underlineColorAndroid="transparent"
+        />
+        <TextInput
+          value={bikeModel}
+          onChangeText={setBikeModel}
+          placeholder="Model (e.g. Activa 125)"
+          placeholderTextColor={colors.textDim}
+          style={styles.input}
+          underlineColorAndroid="transparent"
+        />
+        <PillButton
+          title="SAVE"
+          variant="outline"
+          onPress={handleSaveBike}
+          loading={saveBikeInfo.isPending}
           style={styles.pairButton}
         />
       </GlassCard>
@@ -130,4 +175,14 @@ const styles = StyleSheet.create({
   offsetLabel: { color: colors.textMuted, fontFamily: type.kicker.fontFamily, fontSize: 11 },
   offsetValue: { color: colors.text, fontFamily: type.statValue.fontFamily, fontSize: 20, marginTop: 4 },
   hint: { color: colors.textMuted, marginTop: spacing.lg },
+  bikeHint: { marginTop: spacing.sm, marginBottom: spacing.md },
+  input: {
+    ...type.body,
+    color: colors.text,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glassFillRaised,
+  },
+  fieldSpacing: { marginBottom: spacing.md },
 });

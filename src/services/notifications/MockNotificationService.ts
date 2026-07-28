@@ -1,6 +1,6 @@
 import { supabase } from "../../lib/supabase";
 import { Guardian, Incident } from "../../types/database";
-import { NotificationService } from "./NotificationService";
+import { MedicalSnapshot, NotificationService } from "./NotificationService";
 
 /**
  * "Notifying" guardians today just means writing to incident_events, which
@@ -10,7 +10,7 @@ import { NotificationService } from "./NotificationService";
  * interface.
  */
 export class MockNotificationService implements NotificationService {
-  async notifyGuardians(incident: Incident, guardians: Guardian[]): Promise<void> {
+  async notifyGuardians(incident: Incident, guardians: Guardian[], medicalInfo?: MedicalSnapshot): Promise<void> {
     if (guardians.length === 0) {
       await this.logEvent(incident.id, "No guardians configured — nothing to notify");
       return;
@@ -18,13 +18,23 @@ export class MockNotificationService implements NotificationService {
 
     console.log(
       `[notify] incident ${incident.id}: alerting ${guardians.length} guardian(s)`,
-      guardians.map((g) => g.name)
+      guardians.map((g) => g.name),
+      medicalInfo ? { bloodGroup: medicalInfo.blood_group, hasConditions: Boolean(medicalInfo.medical_conditions) } : "no medical profile on file"
     );
 
     await this.logEvent(
       incident.id,
       `${guardians.length} guardian${guardians.length === 1 ? "" : "s"} notified · ${guardians[0].name} contacted`
     );
+
+    if (medicalInfo?.blood_group || medicalInfo?.medical_conditions) {
+      await this.logEvent(
+        incident.id,
+        `Medical profile included for responders${medicalInfo.blood_group ? ` · ${medicalInfo.blood_group}` : ""}${
+          medicalInfo.medical_conditions ? " · conditions on file" : ""
+        }`
+      );
+    }
   }
 
   async logEvent(incidentId: string, label: string): Promise<void> {

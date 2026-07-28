@@ -25,6 +25,7 @@ export type RootStackParamList = {
   CrashAlert: CrashEvent & { totalSeconds: number };
   LiveIncident: { incidentId: string };
   GuardianForm: { guardianId?: string };
+  EmergencyProfile: undefined;
 };
 
 export type RootStackNavigation = NativeStackNavigationProp<RootStackParamList>;

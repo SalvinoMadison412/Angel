@@ -64,5 +64,29 @@ export function useDevice() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["device", userId] }),
   });
 
-  return { ...query, ensureDevice, saveCalibration, setCalibrated };
+  // Bike info is stored on the same device row the calibration flow uses,
+  // so a make/model always points at a specific paired (or not-yet-paired)
+  // sensor rather than a separate, disconnected "vehicle" record.
+  const saveBikeInfo = useMutation({
+    mutationFn: async (input: { bikeMake: string | null; bikeModel: string | null }) => {
+      let deviceId = query.data?.id;
+      if (!deviceId) {
+        const { data, error: insertError } = await supabase
+          .from("devices")
+          .insert({ owner_id: userId, pairing_status: "unpaired" })
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        deviceId = data.id;
+      }
+      const { error } = await supabase
+        .from("devices")
+        .update({ bike_make: input.bikeMake, bike_model: input.bikeModel })
+        .eq("id", deviceId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["device", userId] }),
+  });
+
+  return { ...query, ensureDevice, saveCalibration, setCalibrated, saveBikeInfo };
 }
