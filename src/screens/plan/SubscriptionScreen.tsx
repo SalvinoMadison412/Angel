@@ -1,8 +1,10 @@
+import { useNavigation } from "@react-navigation/native";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { GlassCard, PillButton, ScreenBackground, Tag } from "../../components";
+import { GlassCard, PillButton, ScreenBackground, ScreenHeader, Tag } from "../../components";
 import { PLAN_PRICES, daysLeft, useCurrentSubscription, usePurchaseSubscription } from "../../hooks/useSubscription";
 import { SubscriptionTier } from "../../types/database";
+import { ProfileStackNavigation } from "../../navigation/types";
 import { colors, spacing, type } from "../../theme";
 
 const PLANS: { tier: SubscriptionTier; perMonth: number; note: string; badge: string }[] = [
@@ -12,6 +14,7 @@ const PLANS: { tier: SubscriptionTier; perMonth: number; note: string; badge: st
 ];
 
 export function SubscriptionScreen() {
+  const navigation = useNavigation<ProfileStackNavigation>();
   const { data: current } = useCurrentSubscription();
   const purchase = usePurchaseSubscription();
   const [selected, setSelected] = useState<SubscriptionTier>(12);
@@ -25,66 +28,72 @@ export function SubscriptionScreen() {
   if (current) {
     return (
       <ScreenBackground scroll contentStyle={styles.content}>
-        <Text style={[type.kicker, styles.dim]}>COVERAGE</Text>
-        <Text style={[type.title, styles.title]}>You're covered</Text>
-        <GlassCard style={styles.currentCard}>
-          <Text style={[type.kicker, styles.dim]}>ACTIVE PLAN</Text>
-          <Text style={styles.currentTier}>{current.tier}-MONTH</Text>
-          <Text style={[type.bodySmall, styles.currentMeta]}>{daysLeft(current.end_date)} DAYS LEFT</Text>
-        </GlassCard>
-        <Text style={[type.bodySmall, styles.footer]}>CANCEL ANYTIME · GST INCLUDED</Text>
+        <ScreenHeader title="PLAN" onBack={() => navigation.goBack()} />
+        <View style={styles.body}>
+          <Text style={[type.kicker, styles.dim]}>COVERAGE</Text>
+          <Text style={[type.title, styles.title]}>You're covered</Text>
+          <GlassCard style={styles.currentCard}>
+            <Text style={[type.kicker, styles.dim]}>ACTIVE PLAN</Text>
+            <Text style={styles.currentTier}>{current.tier}-MONTH</Text>
+            <Text style={[type.bodySmall, styles.currentMeta]}>{daysLeft(current.end_date)} DAYS LEFT</Text>
+          </GlassCard>
+          <Text style={[type.bodySmall, styles.footer]}>CANCEL ANYTIME · GST INCLUDED</Text>
+        </View>
       </ScreenBackground>
     );
   }
 
   return (
     <ScreenBackground scroll contentStyle={styles.content}>
-      <Text style={[type.kicker, styles.dim]}>COVERAGE</Text>
-      <Text style={[type.title, styles.title]}>Stay covered</Text>
-      <Text style={[type.bodySmall, styles.subtitle]}>
-        The device is yours. The response network runs on a plan.
-      </Text>
+      <ScreenHeader title="PLAN" onBack={() => navigation.goBack()} />
+      <View style={styles.body}>
+        <Text style={[type.kicker, styles.dim]}>COVERAGE</Text>
+        <Text style={[type.title, styles.title]}>Stay covered</Text>
+        <Text style={[type.bodySmall, styles.subtitle]}>
+          The device is yours. The response network runs on a plan.
+        </Text>
 
-      {PLANS.map((plan) => {
-        const isSelected = plan.tier === selected;
-        const price = PLAN_PRICES[plan.tier];
-        return (
-          <Pressable key={plan.tier} onPress={() => setSelected(plan.tier)}>
-            <GlassCard accentBorder={isSelected} style={styles.planCard}>
-              <View style={styles.planHeaderRow}>
-                <Text style={[type.kicker, styles.dim]}>{plan.tier} MONTHS</Text>
-                <View style={[styles.radio, isSelected && styles.radioActive]}>
-                  {isSelected && <View style={styles.radioDot} />}
+        {PLANS.map((plan) => {
+          const isSelected = plan.tier === selected;
+          const price = PLAN_PRICES[plan.tier];
+          return (
+            <Pressable key={plan.tier} onPress={() => setSelected(plan.tier)}>
+              <GlassCard accentBorder={isSelected} style={styles.planCard}>
+                <View style={styles.planHeaderRow}>
+                  <Text style={[type.kicker, styles.dim]}>{plan.tier} MONTHS</Text>
+                  <View style={[styles.radio, isSelected && styles.radioActive]}>
+                    {isSelected && <View style={styles.radioDot} />}
+                  </View>
                 </View>
-              </View>
-              <View style={styles.priceRow}>
-                <Text style={styles.price}>₹{price.toLocaleString("en-IN")}</Text>
-                <Text style={styles.perMonth}>₹{plan.perMonth} / MO</Text>
-              </View>
-              <View style={styles.planFooterRow}>
-                <Text style={[type.bodySmall, styles.planNote]}>{plan.note}</Text>
-                <Tag label={plan.badge} variant={isSelected ? "accent" : "neutral"} />
-              </View>
-            </GlassCard>
-          </Pressable>
-        );
-      })}
+                <View style={styles.priceRow}>
+                  <Text style={styles.price}>₹{price.toLocaleString("en-IN")}</Text>
+                  <Text style={styles.perMonth}>₹{plan.perMonth} / MO</Text>
+                </View>
+                <View style={styles.planFooterRow}>
+                  <Text style={[type.bodySmall, styles.planNote]}>{plan.note}</Text>
+                  <Tag label={plan.badge} variant={isSelected ? "accent" : "neutral"} />
+                </View>
+              </GlassCard>
+            </Pressable>
+          );
+        })}
 
-      <View style={styles.features}>
-        <FeatureRow text="Unlimited detections & guardian alerts" />
-        <FeatureRow text="Gig-partner dispatch, 24/7" />
+        <View style={styles.features}>
+          <FeatureRow text="Unlimited detections & guardian alerts" />
+          <FeatureRow text="Gig-partner dispatch, 24/7" />
+        </View>
+
+        <PillButton
+          title={`CONTINUE — ₹${PLAN_PRICES[selected].toLocaleString("en-IN")}`}
+          onPress={handleContinue}
+          loading={purchase.isPending}
+        />
+        <Text style={[type.bodySmall, styles.footer]}>CANCEL ANYTIME · GST INCLUDED</Text>
+
+        {confirmed && (
+          <Text style={styles.confirmed}>Plan activated. Welcome to the network.</Text>
+        )}
       </View>
-
-      <PillButton
-        title={`CONTINUE — ₹${PLAN_PRICES[selected].toLocaleString("en-IN")}`}
-        onPress={handleContinue}
-        loading={purchase.isPending}
-      />
-      <Text style={[type.bodySmall, styles.footer]}>CANCEL ANYTIME · GST INCLUDED</Text>
-
-      {confirmed && (
-        <Text style={styles.confirmed}>Plan activated. Welcome to the network.</Text>
-      )}
     </ScreenBackground>
   );
 }
@@ -99,7 +108,8 @@ function FeatureRow({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  content: { paddingBottom: spacing.xxxl },
+  body: { paddingHorizontal: spacing.xl, gap: spacing.md, marginTop: spacing.md },
   dim: { color: colors.textDim },
   title: { color: colors.text, marginTop: spacing.xs },
   subtitle: { color: colors.textMuted, marginBottom: spacing.md },

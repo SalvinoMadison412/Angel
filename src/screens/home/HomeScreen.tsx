@@ -94,7 +94,7 @@ export function HomeScreen() {
         </GlassCard>
       </Pressable>
 
-      <Pressable onPress={() => navigation.navigate("Plan")}>
+      <Pressable onPress={() => navigation.navigate("Profile", { screen: "Plan" })}>
         <GlassCard style={styles.listRow}>
           <View style={styles.listRowInner}>
             <View>

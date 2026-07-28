@@ -6,7 +6,7 @@ import { colors, fontFamily } from "../theme";
 import { HomeScreen } from "../screens/home/HomeScreen";
 import { DeviceScreen } from "../screens/device/DeviceScreen";
 import { GuardiansScreen } from "../screens/guardians/GuardiansScreen";
-import { SubscriptionScreen } from "../screens/plan/SubscriptionScreen";
+import { ProfileNavigator } from "./ProfileNavigator";
 import { AppTabParamList } from "./types";
 
 const Tab = createBottomTabNavigator<AppTabParamList>();
@@ -15,14 +15,14 @@ const LABELS: Record<keyof AppTabParamList, string> = {
   Home: "HOME",
   Device: "DEVICE",
   Guardians: "GUARDIANS",
-  Plan: "PLAN",
+  Profile: "PROFILE",
 };
 
 const ICONS: Record<keyof AppTabParamList, TabBarIconName> = {
   Home: "home",
   Device: "device",
   Guardians: "guardians",
-  Plan: "plan",
+  Profile: "profile",
 };
 
 export function AppTabs() {
@@ -44,7 +44,7 @@ export function AppTabs() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Device" component={DeviceScreen} />
       <Tab.Screen name="Guardians" component={GuardiansScreen} />
-      <Tab.Screen name="Plan" component={SubscriptionScreen} />
+      <Tab.Screen name="Profile" component={ProfileNavigator} />
     </Tab.Navigator>
   );
 }

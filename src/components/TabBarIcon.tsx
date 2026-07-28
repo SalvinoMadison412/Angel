@@ -1,7 +1,7 @@
 import React from "react";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
-export type TabBarIconName = "home" | "device" | "guardians" | "plan";
+export type TabBarIconName = "home" | "device" | "guardians" | "profile";
 
 interface Props {
   name: TabBarIconName;
@@ -39,10 +39,10 @@ export function TabBarIcon({ name, color, size = 22 }: Props) {
           d="M12 3.5 5 6v5.5c0 4.2 2.9 7.4 7 8.5 4.1-1.1 7-4.3 7-8.5V6l-7-2.5Z"
         />
       )}
-      {name === "plan" && (
+      {name === "profile" && (
         <>
-          <Rect {...common} x={3.5} y={5} width={17} height={14} rx={2.5} />
-          <Path {...common} d="M3.5 10h17M7 14.5h4" />
+          <Circle cx={12} cy={8} r={3.5} stroke={color} strokeWidth={1.75} fill="none" />
+          <Path {...common} d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" />
         </>
       )}
     </Svg>

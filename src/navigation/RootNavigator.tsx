@@ -6,7 +6,6 @@ import { AppTabs } from "./AppTabs";
 import { AuthNavigator } from "./AuthNavigator";
 import { AnimatedSplash } from "../components";
 import { OnboardingScreen } from "../screens/onboarding/OnboardingScreen";
-import { EmergencyProfileScreen } from "../screens/profile/EmergencyProfileScreen";
 import { DeviceSetupScreen } from "../screens/device/DeviceSetupScreen";
 import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
 import { CalibrationWizard } from "../screens/device/CalibrationWizard";
@@ -87,7 +86,6 @@ function AppNavigator() {
         <Stack.Screen name="CrashAlert" component={CrashAlertScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
-        <Stack.Screen name="EmergencyProfile" component={EmergencyProfileScreen} />
       </Stack.Navigator>
       <CrashDetectorListener />
     </>

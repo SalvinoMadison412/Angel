@@ -62,18 +62,6 @@ export function GuardiansScreen() {
         </View>
       </Pressable>
 
-      <Pressable onPress={() => navigation.navigate("EmergencyProfile")}>
-        <GlassCard style={styles.row}>
-          <View style={styles.rowInner}>
-            <View style={styles.info}>
-              <Text style={styles.name}>Emergency Profile</Text>
-              <Text style={styles.meta}>NAME · DOB · BLOOD GROUP · CONDITIONS</Text>
-            </View>
-            <Text style={styles.handleArrow}>→</Text>
-          </View>
-        </GlassCard>
-      </Pressable>
-
       <GlassCard style={styles.infoCard}>
         <Text style={[type.kicker, styles.infoKicker]}>IF NO ONE ANSWERS</Text>
         <Text style={[type.bodySmall, styles.infoBody]}>
