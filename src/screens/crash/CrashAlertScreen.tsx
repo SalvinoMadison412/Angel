@@ -11,22 +11,15 @@ import { etaMinutes, haversineKm } from "../../lib/geo";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 import { initialsFor } from "../../hooks/useGuardians";
-
-const SEVERITY_LABELS: Record<number, string> = {
-  1: "MINOR",
-  2: "MODERATE",
-  3: "ELEVATED",
-  4: "SEVERE",
-  5: "CRITICAL",
-};
+import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
 
 export function CrashAlertScreen() {
   const navigation = useNavigation<RootStackNavigation>();
   const route = useRoute<RouteProp<RootStackParamList, "CrashAlert">>();
-  const { severity, impact, gyro, tilt, still, calibrated, receivedAt, totalSeconds } = route.params;
+  const { severity, trigger, impactG, gyroDps, tilt, still, calibrated, receivedAt, totalSeconds } = route.params;
   const event = useMemo(
-    () => ({ severity, impact, gyro, tilt, still, calibrated, receivedAt }),
-    [severity, impact, gyro, tilt, still, calibrated, receivedAt]
+    () => ({ severity, trigger, impactG, gyroDps, tilt, still, calibrated, receivedAt }),
+    [severity, trigger, impactG, gyroDps, tilt, still, calibrated, receivedAt]
   );
 
   const { session } = useAuth();
@@ -123,6 +116,14 @@ export function CrashAlertScreen() {
             </Text>
           </View>
           <SeverityMeter severity={severity} />
+
+          <View style={[styles.triggerBadge, trigger === "impact" ? styles.triggerBadgeImpact : styles.triggerBadgeTilt]}>
+            <Text style={[type.kicker, trigger === "impact" ? styles.triggerTextImpact : styles.triggerTextTilt]}>
+              {triggerHeadline(trigger)}
+            </Text>
+          </View>
+          <Text style={[type.bodySmall, styles.triggerCopy]}>{triggerDescription(trigger)}</Text>
+
           {!calibrated && (
             <View style={styles.uncalibratedBanner}>
               <Text style={[type.kicker, styles.uncalibratedText]}>⚠ SENSOR NOT CALIBRATED</Text>
@@ -133,12 +134,12 @@ export function CrashAlertScreen() {
             </View>
           )}
           <Text style={[type.label, styles.metaRow]}>
-            IMPACT {impact.toFixed(0)}   GYRO {gyro.toFixed(0)}   TILT {calibrated ? `${tilt.toFixed(0)}°` : "—"}
+            IMPACT {impactG.toFixed(2)}G   ROTATION {gyroDps.toFixed(0)}°/S   LEAN{" "}
+            {calibrated ? `${tilt.toFixed(0)}°` : "—"}
             {still ? "   STILL" : ""}
           </Text>
           <Text style={[type.bodySmall, styles.caveat]}>
-            Severity is a rough 1-5 triage signal from on-device thresholds, not a precise or medically validated
-            score.
+            Severity is an estimate based on sensor readings — a rough 1-5 triage signal, not a medical diagnosis.
           </Text>
         </View>
 
@@ -186,6 +187,19 @@ const styles = StyleSheet.create({
   severitySection: { width: "100%" },
   severityHeaderRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.md },
   dim: { color: colors.textDim },
+  triggerBadge: {
+    alignSelf: "flex-start",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  triggerBadgeImpact: { borderColor: colors.accentBorder, backgroundColor: colors.accentMuted },
+  triggerBadgeTilt: { borderColor: "rgba(255,176,32,0.5)", backgroundColor: "rgba(255,176,32,0.14)" },
+  triggerTextImpact: { color: colors.accent },
+  triggerTextTilt: { color: "#FFB020" },
+  triggerCopy: { color: colors.textMuted, marginTop: spacing.sm },
   metaRow: { color: colors.textMuted, marginTop: spacing.md },
   caveat: { color: colors.textDim, marginTop: spacing.sm },
   uncalibratedBanner: {

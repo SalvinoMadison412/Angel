@@ -1,4 +1,4 @@
-import { ConnectionState, CrashEvent, DEVICE_LOCAL_NAME, PairedDevice } from "./types";
+import { ConnectionState, CrashEvent, DeviceFault, DEVICE_LOCAL_NAME, PairedDevice } from "./types";
 import { CrashDetectorBle, DiscoveredDevice } from "./crashDetectorBle";
 
 const MOCK_DEVICE: DiscoveredDevice = { id: "mock-crash-detector", name: DEVICE_LOCAL_NAME };
@@ -13,6 +13,7 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
   private connectionState: ConnectionState = "disconnected";
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
+  private faultListeners = new Set<(fault: DeviceFault | null) => void>();
   private paired: PairedDevice | null = null;
 
   getConnectionState(): ConnectionState {
@@ -71,6 +72,11 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
     return () => this.eventListeners.delete(listener);
   }
 
+  subscribeFaultState(listener: (fault: DeviceFault | null) => void): () => void {
+    this.faultListeners.add(listener);
+    return () => this.faultListeners.delete(listener);
+  }
+
   async isAndroidLocationServicesDisabled(): Promise<boolean> {
     return false;
   }
@@ -79,8 +85,9 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
   simulateCrash(event: Partial<Omit<CrashEvent, "receivedAt">> = {}): void {
     const full: CrashEvent = {
       severity: 3,
-      impact: 28000,
-      gyro: 19000,
+      trigger: "impact",
+      impactG: 1.7,
+      gyroDps: 1160,
       tilt: 40,
       still: true,
       calibrated: true,
@@ -88,6 +95,16 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
       receivedAt: Date.now(),
     };
     this.eventListeners.forEach((listener) => listener(full));
+  }
+
+  /** Dev-only: injects a synthetic device fault as if the real sensor sent it. */
+  simulateFault(reason = "sensor_communication_lost"): void {
+    this.faultListeners.forEach((listener) => listener({ reason, receivedAt: Date.now() }));
+  }
+
+  /** Dev-only: injects a synthetic fault_cleared as if the real sensor sent it. */
+  clearFault(): void {
+    this.faultListeners.forEach((listener) => listener(null));
   }
 
   private setConnectionState(state: ConnectionState, errorMessage?: string) {

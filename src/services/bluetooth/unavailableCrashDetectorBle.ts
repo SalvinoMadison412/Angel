@@ -1,4 +1,4 @@
-import { ConnectionState, CrashEvent, PairedDevice } from "./types";
+import { ConnectionState, CrashEvent, DeviceFault, PairedDevice } from "./types";
 import { CrashDetectorBle, DiscoveredDevice } from "./crashDetectorBle";
 
 const MESSAGE =
@@ -48,6 +48,10 @@ export class UnavailableCrashDetectorBleService implements CrashDetectorBle {
   }
 
   subscribeCrashEvents(_listener: (event: CrashEvent) => void): () => void {
+    return () => {};
+  }
+
+  subscribeFaultState(_listener: (fault: DeviceFault | null) => void): () => void {
     return () => {};
   }
 

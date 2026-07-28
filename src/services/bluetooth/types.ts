@@ -12,26 +12,19 @@ export const DEVICE_LOCAL_NAME = "CrashDetector";
 
 export type ConnectionState = "disconnected" | "scanning" | "connecting" | "connected" | "error";
 
-// Firmware configures the BMI160 to ±2g (see CrashDetector.ino's imuInit()),
-// which puts 1g at 16384 raw LSB counts — the same constant the firmware
-// uses for its own resting-baseline calibration. `impact` in the payload is
-// a raw deviation from that baseline, not a physical unit, so this is needed
-// to show it as an actual g-force delta rather than a meaningless raw count.
-export const RAW_COUNTS_PER_G = 16384;
+// Firmware now converts to physical units on-device and sends impact_g /
+// gyro_dps directly — no raw-count conversion needed on the app side.
+const severityLiteral = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
 
-export function impactToGForce(impact: number): number {
-  return impact / RAW_COUNTS_PER_G;
-}
-
-// The wire schema is versioned (see firmware README) so a future firmware
-// field change fails loudly here instead of silently misparsing.
-const CRASH_PAYLOAD_VERSION = 1;
-
-export const crashPayloadSchema = z.object({
-  v: z.literal(CRASH_PAYLOAD_VERSION),
-  severity: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
-  impact: z.number(),
-  gyro: z.number(),
+// Every notification carries a `type` discriminator, checked before
+// anything else about the message is trusted — a "fault" and a "crash"
+// payload have no fields in common and must never share a code path.
+export const crashMessageSchema = z.object({
+  type: z.literal("crash"),
+  trigger: z.enum(["impact", "tilt"]),
+  severity: severityLiteral,
+  impact_g: z.number(),
+  gyro_dps: z.number(),
   tilt: z.number(),
   still: z.boolean(),
   // Whether the device has a stored "neutral mount orientation" reference.
@@ -41,12 +34,34 @@ export const crashPayloadSchema = z.object({
   calibrated: z.boolean(),
 });
 
-export type CrashPayload = z.infer<typeof crashPayloadSchema>;
+// A device-health problem (e.g. the IMU stopped responding over I2C) — not
+// a personal emergency. Must never reach the crash-alert/dispatch pipeline.
+export const faultMessageSchema = z.object({
+  type: z.literal("fault"),
+  reason: z.string(),
+});
+
+export const faultClearedMessageSchema = z.object({
+  type: z.literal("fault_cleared"),
+});
+
+export const crashDetectorMessageSchema = z.discriminatedUnion("type", [
+  crashMessageSchema,
+  faultMessageSchema,
+  faultClearedMessageSchema,
+]);
+
+export type CrashMessage = z.infer<typeof crashMessageSchema>;
+export type CrashDetectorMessage = z.infer<typeof crashDetectorMessageSchema>;
 
 export interface CrashEvent {
   severity: 1 | 2 | 3 | 4 | 5;
-  impact: number;
-  gyro: number;
+  /** What triggered this event — a hard impact spike, or a sustained extreme tilt with no qualifying impact. */
+  trigger: "impact" | "tilt";
+  /** Force of the hit, in g's. */
+  impactG: number;
+  /** How fast the bike was spinning/tumbling, in degrees/second. */
+  gyroDps: number;
   /** Degrees of deviation from the calibrated mounting position — only meaningful when `calibrated` is true. */
   tilt: number;
   still: boolean;
@@ -55,16 +70,23 @@ export interface CrashEvent {
   receivedAt: number;
 }
 
-export function crashEventFromPayload(payload: CrashPayload): CrashEvent {
+export function crashEventFromMessage(message: CrashMessage): CrashEvent {
   return {
-    severity: payload.severity,
-    impact: payload.impact,
-    gyro: payload.gyro,
-    tilt: payload.tilt,
-    still: payload.still,
-    calibrated: payload.calibrated,
+    severity: message.severity,
+    trigger: message.trigger,
+    impactG: message.impact_g,
+    gyroDps: message.gyro_dps,
+    tilt: message.tilt,
+    still: message.still,
+    calibrated: message.calibrated,
     receivedAt: Date.now(),
   };
+}
+
+export interface DeviceFault {
+  reason: string;
+  /** app-side receipt time — the firmware doesn't carry a clock */
+  receivedAt: number;
 }
 
 export interface PairedDevice {

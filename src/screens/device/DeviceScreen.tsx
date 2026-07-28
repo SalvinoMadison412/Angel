@@ -16,8 +16,8 @@ const BLE_STATE_LABEL: Record<string, string> = {
 
 export function DeviceScreen() {
   const navigation = useNavigation<AppTabNavigation<"Device">>();
-  const { data: device, ensureDevice, saveBikeInfo } = useDevice();
-  const { connectionState, pairedDevice } = useCrashDetector();
+  const { data: device, saveBikeInfo } = useDevice();
+  const { connectionState, pairedDevice, fault } = useCrashDetector();
 
   const bleConnected = connectionState === "connected";
 
@@ -36,16 +36,19 @@ export function DeviceScreen() {
     saveBikeInfo.mutate({ bikeMake: bikeMake.trim() || null, bikeModel: bikeModel.trim() || null });
   };
 
-  const handleCalibrate = async () => {
-    if (!device) {
-      await ensureDevice.mutateAsync();
-    }
-    navigation.navigate("Calibration");
-  };
-
   return (
     <ScreenBackground scroll contentStyle={styles.content}>
       <Text style={[type.title, styles.title]}>Device</Text>
+
+      {fault && (
+        <GlassCard accentBorder>
+          <Text style={[type.kicker, styles.faultTitle]}>⚠ SENSOR NOT RESPONDING</Text>
+          <Text style={[type.bodySmall, styles.faultCopy]}>
+            Check the device and its mounting — a loose connector or a dead battery are the usual causes. This is a
+            device problem, not a crash; no one has been alerted.
+          </Text>
+        </GlassCard>
+      )}
 
       <GlassCard>
         <Text style={[type.kicker, styles.dim]}>BLUETOOTH</Text>
@@ -127,12 +130,6 @@ export function DeviceScreen() {
           Every mount sits at a different angle. Re-calibrate any time the device is remounted.
         </Text>
       </GlassCard>
-
-      <PillButton
-        title={device?.pairing_status === "paired" ? "RE-CALIBRATE" : "PAIR & CALIBRATE"}
-        onPress={handleCalibrate}
-        loading={ensureDevice.isPending}
-      />
     </ScreenBackground>
   );
 }
@@ -150,6 +147,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
   title: { color: colors.text },
   dim: { color: colors.textDim },
+  faultTitle: { color: colors.danger },
+  faultCopy: { color: colors.textMuted, marginTop: spacing.sm },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",

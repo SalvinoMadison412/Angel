@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ConnectionState,
   CrashEvent,
+  DeviceFault,
   DiscoveredDevice,
   MockCrashDetectorBleService,
   PairedDevice,
@@ -15,6 +16,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
   const [connectionState, setConnectionState] = useState<ConnectionState>(service.getConnectionState());
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [lastEvent, setLastEvent] = useState<CrashEvent | null>(null);
+  const [fault, setFault] = useState<DeviceFault | null>(null);
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([]);
   const [pairedDevice, setPairedDevice] = useState<PairedDevice | null>(null);
 
@@ -24,11 +26,13 @@ export function useCrashDetector(options?: { mock?: boolean }) {
       setErrorMessage(message);
     });
     const unsubscribeEvents = service.subscribeCrashEvents(setLastEvent);
+    const unsubscribeFault = service.subscribeFaultState(setFault);
     service.getPairedDevice().then(setPairedDevice);
 
     return () => {
       unsubscribeState();
       unsubscribeEvents();
+      unsubscribeFault();
     };
   }, [service]);
 
@@ -71,11 +75,16 @@ export function useCrashDetector(options?: { mock?: boolean }) {
   const simulateCrash = mock
     ? (event?: Partial<Omit<CrashEvent, "receivedAt">>) => (service as MockCrashDetectorBleService).simulateCrash(event)
     : undefined;
+  const simulateFault = mock
+    ? (reason?: string) => (service as MockCrashDetectorBleService).simulateFault(reason)
+    : undefined;
+  const clearSimulatedFault = mock ? () => (service as MockCrashDetectorBleService).clearFault() : undefined;
 
   return {
     connectionState,
     errorMessage,
     lastEvent,
+    fault,
     discoveredDevices,
     pairedDevice,
     scan,
@@ -85,5 +94,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     forgetDevice,
     checkAndroidLocationServicesDisabled,
     simulateCrash,
+    simulateFault,
+    clearSimulatedFault,
   };
 }

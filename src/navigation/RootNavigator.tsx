@@ -8,7 +8,6 @@ import { AnimatedSplash } from "../components";
 import { OnboardingScreen } from "../screens/onboarding/OnboardingScreen";
 import { DeviceSetupScreen } from "../screens/device/DeviceSetupScreen";
 import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
-import { CalibrationWizard } from "../screens/device/CalibrationWizard";
 import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
 import { LiveIncidentScreen } from "../screens/incident/LiveIncidentScreen";
 import { GuardianFormScreen } from "../screens/guardians/GuardianFormScreen";
@@ -82,7 +81,6 @@ function AppNavigator() {
         <Stack.Screen name="Tabs" component={AppTabs} />
         <Stack.Screen name="DeviceSetup" component={DeviceSetupScreen} />
         <Stack.Screen name="CalibrateSensor" component={CalibrateSensorScreen} />
-        <Stack.Screen name="Calibration" component={CalibrationWizard} />
         <Stack.Screen name="CrashAlert" component={CrashAlertScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />

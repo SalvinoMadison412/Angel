@@ -44,7 +44,7 @@ export function DeviceSetupScreen() {
     if (connectionState !== "connected" || hasPromptedCalibration.current) return;
     hasPromptedCalibration.current = true;
     if (!device?.calibrated) {
-      navigation.navigate("CalibrateSensor");
+      navigation.navigate("CalibrateSensor", { mandatory: true });
     }
   }, [connectionState, device?.calibrated, navigation]);
 

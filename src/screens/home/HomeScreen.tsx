@@ -1,20 +1,22 @@
 import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { GlassCard, HoloMotorcycle, ScreenBackground, StatTile } from "../../components";
+import { GlassCard, HoloMotorcycle, ScreenBackground, SeverityMeter, StatTile } from "../../components";
 import { useCrashDetector, useCurrentSubscription, useGuardians } from "../../hooks";
 import { daysLeft } from "../../hooks/useSubscription";
-import { CrashEvent, impactToGForce } from "../../services/bluetooth";
-import { colors, fontFamily, spacing, type } from "../../theme";
+import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
+import { colors, fontFamily, severityColor, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
 
 // Rough scaling so each debug severity button lands roughly where the
-// firmware's own threshold ladder (see firmware/README.md) would place it —
-// not meant to be exact, just plausible enough to exercise every band.
+// firmware's own threshold ladder (see firmware/CrashDetector/CrashDetector.ino)
+// would place it — not meant to be exact, just plausible enough to exercise
+// every band.
 function mockMetricsForSeverity(severity: number) {
   return {
-    impact: 15000 + severity * 4500,
-    gyro: 9000 + severity * 3200,
+    trigger: "impact" as const,
+    impactG: 1 + severity * 0.45,
+    gyroDps: 650 + severity * 380,
     tilt: 20 + severity * 9,
     still: severity >= 3,
     calibrated: true, // debug panel always simulates a calibrated sensor
@@ -23,49 +25,20 @@ function mockMetricsForSeverity(severity: number) {
 
 const formatReadingTime = (receivedAt: number) => new Date(receivedAt).toLocaleTimeString("en-IN", { hour12: false });
 
-// The firmware only notifies once per detected impact, not on a continuous
-// stream (see firmware/CrashDetector/CrashDetector.ino) — so these tiles show
-// the most recent real reading, not a live gauge. Never render a value that
-// didn't come from an actual BLE payload.
-type ReadingTile = { kind: "empty"; message: string } | { kind: "value"; value: string; unit: string; caption: string };
-
-function gForceTile(lastEvent: CrashEvent | null, connected: boolean): ReadingTile {
-  if (!lastEvent) return { kind: "empty", message: connected ? "No readings yet" : "No device connected" };
-  return {
-    kind: "value",
-    value: impactToGForce(lastEvent.impact).toFixed(2),
-    unit: "G",
-    caption: `LAST IMPACT · ${formatReadingTime(lastEvent.receivedAt)}`,
-  };
-}
-
-function leanTile(lastEvent: CrashEvent | null, connected: boolean): ReadingTile {
-  if (!lastEvent) return { kind: "empty", message: connected ? "No readings yet" : "No device connected" };
-  if (!lastEvent.calibrated) return { kind: "empty", message: "Not calibrated" };
-  return {
-    kind: "value",
-    value: String(Math.round(lastEvent.tilt)),
-    unit: "DEG",
-    caption: `LAST IMPACT · ${formatReadingTime(lastEvent.receivedAt)}`,
-  };
-}
-
 export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: guardians } = useGuardians();
   const { data: subscription } = useCurrentSubscription();
   const { connectionState, lastEvent } = useCrashDetector();
-  const { simulateCrash } = useCrashDetector({ mock: true });
+  const { simulateCrash, simulateFault, clearSimulatedFault } = useCrashDetector({ mock: true });
 
   // Driven by the live BLE connection state, not the device row's persisted
   // `pairing_status` — that flag reflects setup history and goes stale the
   // moment the sensor actually disconnects, which is exactly the bug this
   // badge exists to avoid.
   const isConnected = connectionState === "connected";
-
-  const gTile = gForceTile(lastEvent, isConnected);
-  const lTile = leanTile(lastEvent, isConnected);
   const leanDeg = lastEvent && lastEvent.calibrated ? lastEvent.tilt / 4 : 0;
+  const emptyReadingMessage = isConnected ? "No readings yet" : "No device connected";
 
   // Feeds the mock BLE stream rather than writing an incident directly —
   // this exercises the exact same app-root listener → CrashAlertScreen →
@@ -111,22 +84,56 @@ export function HomeScreen() {
         </View>
       </GlassCard>
 
-      <View style={styles.statRow}>
-        <StatTile
-          label="G-FORCE"
-          value={gTile.kind === "value" ? gTile.value : gTile.message}
-          unit={gTile.kind === "value" ? gTile.unit : undefined}
-          caption={gTile.kind === "value" ? gTile.caption : undefined}
-          empty={gTile.kind === "empty"}
-        />
-        <StatTile
-          label="LEAN"
-          value={lTile.kind === "value" ? lTile.value : lTile.message}
-          unit={lTile.kind === "value" ? lTile.unit : undefined}
-          caption={lTile.kind === "value" ? lTile.caption : undefined}
-          empty={lTile.kind === "empty"}
-        />
-      </View>
+      <GlassCard style={styles.readingCard}>
+        <Text style={[type.kicker, styles.dimText]}>LAST READING</Text>
+        {!lastEvent ? (
+          <Text style={styles.emptyReading}>{emptyReadingMessage}</Text>
+        ) : (
+          <>
+            <View style={styles.readingSeverityRow}>
+              <Text style={[styles.severityNumber, { color: severityColor(lastEvent.severity) }]}>
+                {lastEvent.severity}
+              </Text>
+              <View style={styles.severityTextCol}>
+                <Text style={styles.severityLabel}>
+                  {SEVERITY_LABELS[lastEvent.severity]} · SEVERITY {lastEvent.severity}/5
+                </Text>
+                <Text
+                  style={[
+                    type.bodySmall,
+                    lastEvent.trigger === "impact" ? styles.triggerTextImpact : styles.triggerTextTilt,
+                  ]}
+                >
+                  {triggerHeadline(lastEvent.trigger)}
+                </Text>
+              </View>
+            </View>
+            <SeverityMeter severity={lastEvent.severity} />
+            <Text style={styles.readingCopy}>
+              {triggerDescription(lastEvent.trigger)} An estimate based on sensor readings, not a medical diagnosis.
+            </Text>
+
+            <View style={styles.metricsRow}>
+              <StatTile label="IMPACT" value={lastEvent.impactG.toFixed(2)} unit="G" caption="Force of the hit" />
+              <StatTile
+                label="ROTATION"
+                value={lastEvent.gyroDps.toFixed(0)}
+                unit="°/S"
+                caption="Spin/tumble speed"
+              />
+              <StatTile
+                label="LEAN"
+                value={lastEvent.calibrated ? String(Math.round(lastEvent.tilt)) : "Not calibrated"}
+                unit={lastEvent.calibrated ? "°" : undefined}
+                caption={lastEvent.calibrated ? "Off resting angle" : undefined}
+                empty={!lastEvent.calibrated}
+              />
+            </View>
+
+            <Text style={styles.timestamp}>{formatReadingTime(lastEvent.receivedAt)}</Text>
+          </>
+        )}
+      </GlassCard>
 
       <Pressable onPress={() => navigation.navigate("Guardians")}>
         <GlassCard style={styles.listRow}>
@@ -170,6 +177,17 @@ export function HomeScreen() {
               <Text style={styles.severityButtonText}>{level}</Text>
             </Pressable>
           ))}
+        </View>
+        <Text style={[type.bodySmall, styles.debugCopy, styles.debugFaultCopy]}>
+          Or simulate a device-health problem — this should never trigger the emergency flow.
+        </Text>
+        <View style={styles.debugFaultRow}>
+          <Pressable style={styles.debugFaultButton} onPress={() => simulateFault?.()}>
+            <Text style={styles.debugFaultButtonText}>SIMULATE FAULT</Text>
+          </Pressable>
+          <Pressable style={styles.debugFaultButton} onPress={() => clearSimulatedFault?.()}>
+            <Text style={styles.debugFaultButtonText}>CLEAR FAULT</Text>
+          </Pressable>
         </View>
       </GlassCard>
     </ScreenBackground>
@@ -215,7 +233,17 @@ const styles = StyleSheet.create({
   },
   sensorOk: { color: colors.accent },
   motifWrap: { alignItems: "center", paddingVertical: spacing.xl },
-  statRow: { flexDirection: "row", gap: spacing.md },
+  readingCard: {},
+  emptyReading: { color: colors.textDim, marginTop: spacing.md },
+  readingSeverityRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md },
+  severityNumber: { fontFamily: type.display.fontFamily, fontSize: 36 },
+  severityTextCol: { flex: 1 },
+  severityLabel: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 14 },
+  triggerTextImpact: { color: colors.accent, marginTop: 2 },
+  triggerTextTilt: { color: "#FFB020", marginTop: 2 },
+  readingCopy: { color: colors.textMuted, marginTop: spacing.md },
+  metricsRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg },
+  timestamp: { color: colors.textDim, fontFamily: type.label.fontFamily, fontSize: 11, marginTop: spacing.md },
   listRow: {},
   listRowInner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   listTitle: { color: colors.text, fontFamily: fontFamily.bodySemiBold },
@@ -235,4 +263,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   severityButtonText: { color: colors.accent, fontFamily: type.button.fontFamily, fontSize: 16 },
+  debugFaultCopy: { marginBottom: spacing.sm },
+  debugFaultRow: { flexDirection: "row", gap: spacing.sm },
+  debugFaultButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.glassFillRaised,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  debugFaultButtonText: { color: colors.textMuted, fontFamily: type.button.fontFamily, fontSize: 11 },
 });

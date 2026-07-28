@@ -1,10 +1,11 @@
 // Angel CrashDetector — Arduino Nano ESP32 firmware
 //
-// Reads a BMI160 accelerometer/gyroscope over I2C, watches for an impact
-// spike, and — only when one is detected — pushes a single BLE notification
-// with a JSON crash event. This is NOT a continuous telemetry stream: BLE
-// central apps should expect long silent stretches punctuated by rare
-// notifications.
+// Reads a BMI160 accelerometer/gyroscope over I2C via the DFRobot_BMI160
+// library, watches for a crash signal, and pushes a single BLE notification
+// per event — either a "crash" (impact- or tilt-triggered), a "fault" (the
+// IMU stopped responding), or a "fault_cleared". This is NOT a continuous
+// telemetry stream: BLE central apps should expect long silent stretches
+// punctuated by rare notifications.
 //
 // BLE contract
 // ------------
@@ -14,279 +15,245 @@
 // some OS BLE stacks special-case recognized profiles (parsing/caching the
 // value as an actual heart-rate reading), which produces intermittent
 // notify failures that look exactly like app-side connection bugs. Fixed
-// here by using a custom 128-bit UUID pair instead. Generated with
-// `uuidgen`; if you regenerate these, update the app's
-// src/services/bluetooth/types.ts to match — the two must stay in sync.
-#include <ArduinoBLE.h>
+// by using a custom 128-bit UUID pair instead. Generated with `uuidgen`; if
+// you regenerate these, update the app's src/services/bluetooth/types.ts to
+// match — the two must stay in sync.
+//
+// Every notification carries a `type` field ("crash" / "fault" /
+// "fault_cleared") that the app branches on before touching anything else —
+// see firmware/README.md for the full payload shapes.
+#include <DFRobot_BMI160.h>
 #include <Wire.h>
+#include <ArduinoBLE.h>
+#include <Preferences.h>
 
-static const char *CRASH_SERVICE_UUID = "9a0d2e10-66dd-4d3d-930e-a4d0e2806c51";
-static const char *CRASH_CHARACTERISTIC_UUID = "9a0d2e11-66dd-4d3d-930e-a4d0e2806c51";
-static const char *DEVICE_LOCAL_NAME = "CrashDetector";
+DFRobot_BMI160 bmi160;
+const int8_t i2c_addr = 0x69;
 
-// Payload is versioned so future firmware changes (new fields, renamed
-// fields, different units) don't silently break the app's parser — the app
-// checks `v` before trusting the rest of the shape.
-static const int PAYLOAD_VERSION = 1;
-static const size_t PAYLOAD_MAX_LEN = 160;
+BLEService crashService("9a0d2e10-66dd-4d3d-930e-a4d0e2806c51");
+BLEStringCharacteristic crashChar("9a0d2e11-66dd-4d3d-930e-a4d0e2806c51", BLERead | BLENotify, 200);
+BLEByteCharacteristic calibrateChar("9a0d2e12-66dd-4d3d-930e-a4d0e2806c51", BLEWrite);
 
-BLEService crashService(CRASH_SERVICE_UUID);
-BLEStringCharacteristic crashChar(CRASH_CHARACTERISTIC_UUID, BLERead | BLENotify, PAYLOAD_MAX_LEN);
+Preferences prefs;
 
-// ───────────────────────────────────────────────────────────────────────
-// BMI160 — raw register access (no external sensor library dependency).
-// Default I2C address (SDO tied low). Explicitly configured to ±2g /
-// ±2000 dps rather than relying on power-on-reset defaults.
-//
-// Unlike the MPU6050, the BMI160 boots into a low-power suspend state:
-// the accelerometer and gyroscope each need an explicit "set PMU mode
-// normal" command before they report real data, and the gyro in
-// particular needs on the order of tens of milliseconds to start up.
-// Skipping that wait is the most common reason a BMI160 port reads all
-// zeros or garbage.
-// ───────────────────────────────────────────────────────────────────────
-static const uint8_t BMI_ADDR = 0x68;
-static const uint8_t REG_CHIP_ID = 0x00;
-static const uint8_t REG_GYR_DATA = 0x0C;   // burst read from here: gyro xyz, then accel xyz
-static const uint8_t REG_ACC_CONF = 0x40;
-static const uint8_t REG_ACC_RANGE = 0x41;
-static const uint8_t REG_GYR_CONF = 0x42;
-static const uint8_t REG_GYR_RANGE = 0x43;
-static const uint8_t REG_CMD = 0x7E;
-static const uint8_t CHIP_ID_EXPECTED = 0xD1;
-static const uint8_t CMD_ACC_NORMAL_MODE = 0x11;
-static const uint8_t CMD_GYR_NORMAL_MODE = 0x15;
+// BMI160 power-on defaults: +/-2g accel, +/-2000dps gyro.
+// Verify against your init sequence if you ever change the configured range.
+const float ACCEL_LSB_PER_G  = 16384.0;
+const float GYRO_LSB_PER_DPS = 16.4;
 
-struct ImuSample {
-  float ax, ay, az; // raw LSB counts, not converted to g — see severity note below
-  float gx, gy, gz; // raw LSB counts, not converted to deg/s
-};
+const float IMPACT_LOW_G   = 20000.0 / ACCEL_LSB_PER_G;   // ~1.22 g
+const float IMPACT_HIGH_G  = 50000.0 / ACCEL_LSB_PER_G;   // ~3.05 g
+const float GYRO_LOW_DPS   = 15000.0 / GYRO_LSB_PER_DPS;  // ~915 dps
+const float GYRO_HIGH_DPS  = 40000.0 / GYRO_LSB_PER_DPS;  // ~2439 dps
+const float TILT_HIGH_DEG      = 70.0;
+const float TILT_EXTREME_DEG   = 100.0;
+const unsigned long EXTREME_TILT_HOLD_MS = 4000;
+const float STILL_THRESH_G     = 5000.0 / ACCEL_LSB_PER_G;
+const unsigned long STILL_WINDOW_MS = 3000;
+const int FAULT_CONSECUTIVE_LIMIT = 100;
 
-void bmiWriteReg(uint8_t reg, uint8_t value) {
-  Wire.beginTransmission(BMI_ADDR);
-  Wire.write(reg);
-  Wire.write(value);
-  Wire.endTransmission(true);
+float refX = 0, refY = 0, refZ = ACCEL_LSB_PER_G;
+bool calibrated = false;
+
+float lastMagG = 0;
+unsigned long stillSince = 0;
+bool wasImpact = false;
+unsigned long impactTime = 0;
+unsigned long extremeTiltSince = 0;
+bool tiltIncidentReported = false;
+int consecutiveFailures = 0;
+bool faultReported = false;
+bool sensorOk = true;
+
+void loadCalibration() {
+  prefs.begin("crash", true);
+  calibrated = prefs.getBool("cal", false);
+  refX = prefs.getFloat("refX", 0);
+  refY = prefs.getFloat("refY", 0);
+  refZ = prefs.getFloat("refZ", ACCEL_LSB_PER_G);
+  prefs.end();
 }
 
-void imuInit() {
-  Wire.begin();
-  delay(10); // let the sensor's own power-on-reset settle before talking to it
+void saveCalibration(float x, float y, float z) {
+  prefs.begin("crash", false);
+  prefs.putBool("cal", true);
+  prefs.putFloat("refX", x);
+  prefs.putFloat("refY", y);
+  prefs.putFloat("refZ", z);
+  prefs.end();
+  refX = x; refY = y; refZ = z;
+  calibrated = true;
+  Serial.println("Calibration saved.");
+}
 
-  Wire.beginTransmission(BMI_ADDR);
-  Wire.write(REG_CHIP_ID);
-  Wire.endTransmission(false);
-  Wire.requestFrom(BMI_ADDR, (uint8_t)1);
-  uint8_t chipId = Wire.available() ? Wire.read() : 0x00;
-  if (chipId != CHIP_ID_EXPECTED) {
-    Serial.print("[imu] warning: unexpected CHIP_ID 0x");
-    Serial.println(chipId, HEX);
+void runCalibration() {
+  Serial.println("Calibrating... keep bike still and upright.");
+  const int N = 50;
+  double sx = 0, sy = 0, sz = 0;
+  int count = 0;
+  for (int i = 0; i < N; i++) {
+    int16_t accelGyro[6] = {0};
+    if (bmi160.getAccelGyroData(accelGyro) == 0) {
+      sx += accelGyro[3]; sy += accelGyro[4]; sz += accelGyro[5];
+      count++;
+    }
+    delay(20);
   }
-
-  bmiWriteReg(REG_ACC_RANGE, 0x03); // ±2g
-  bmiWriteReg(REG_ACC_CONF, 0x28);  // normal filter, 100 Hz output data rate
-  bmiWriteReg(REG_GYR_RANGE, 0x00); // ±2000 dps
-  bmiWriteReg(REG_GYR_CONF, 0x28);  // normal filter, 100 Hz output data rate
-
-  bmiWriteReg(REG_CMD, CMD_ACC_NORMAL_MODE);
-  delay(5); // accel normal-mode startup, ~3.8ms typical
-
-  bmiWriteReg(REG_CMD, CMD_GYR_NORMAL_MODE);
-  delay(80); // gyro normal-mode startup, up to ~80ms — the step MPU6050 code doesn't need
+  if (count > 0) saveCalibration(sx / count, sy / count, sz / count);
+  else Serial.println("Calibration failed: no sensor data.");
 }
 
-bool imuRead(ImuSample &out) {
-  Wire.beginTransmission(BMI_ADDR);
-  Wire.write(REG_GYR_DATA);
-  if (Wire.endTransmission(false) != 0) return false;
-
-  const uint8_t bytesToRead = 12; // gyro(6) + accel(6)
-  if (Wire.requestFrom(BMI_ADDR, bytesToRead) != bytesToRead) return false;
-
-  // BMI160 registers are little-endian (low byte first) — the reverse of
-  // the MPU6050's big-endian layout.
-  uint8_t gxl = Wire.read(), gxh = Wire.read();
-  uint8_t gyl = Wire.read(), gyh = Wire.read();
-  uint8_t gzl = Wire.read(), gzh = Wire.read();
-  uint8_t axl = Wire.read(), axh = Wire.read();
-  uint8_t ayl = Wire.read(), ayh = Wire.read();
-  uint8_t azl = Wire.read(), azh = Wire.read();
-
-  out.gx = (int16_t)((gxh << 8) | gxl);
-  out.gy = (int16_t)((gyh << 8) | gyl);
-  out.gz = (int16_t)((gzh << 8) | gzl);
-  out.ax = (int16_t)((axh << 8) | axl);
-  out.ay = (int16_t)((ayh << 8) | ayl);
-  out.az = (int16_t)((azh << 8) | azl);
-  return true;
-}
-
-float vecMag(float x, float y, float z) {
-  return sqrtf(x * x + y * y + z * z);
-}
-
-// Degrees from vertical. Uses raw accel counts directly — the LSB/g scale
-// factor cancels out of the ratio, so this is valid without a calibrated
-// conversion to physical g units.
-float tiltFromVertical(const ImuSample &s) {
-  float mag = vecMag(s.ax, s.ay, s.az);
-  if (mag < 1.0f) return 0.0f;
-  float cosTilt = constrain(s.az / mag, -1.0f, 1.0f);
-  return degrees(acos(cosTilt));
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Severity ladder — a hand-picked first pass, NOT validated against real
-// crash / non-crash data. Treat these constants as a rough triage signal
-// to unblock app development, not a calibrated model. See the app repo's
-// AGENTS.md section 4 for the planned calibration follow-up (log raw
-// tuples + human-labeled ground truth, fit an ordinal classifier, keep
-// these on-device thresholds only as a cheap pre-filter that decides
-// whether to wake BLE at all).
-//
-// These numbers implicitly assume the ±2g / ±2000 dps ranges configured in
-// imuInit() above — if you change either range, these thresholds are
-// scaled wrong until re-tuned (roughly linearly: e.g. switching gyro range
-// to ±1000 dps would double the raw counts for the same physical rotation).
-// ───────────────────────────────────────────────────────────────────────
-static const float IMPACT_TRIGGER = 20000.0f; // raw accel-magnitude deviation that starts an impact window
-static const float IMPACT_LOW = 24000.0f;
-static const float IMPACT_HIGH = 34000.0f;
-static const float GYRO_LOW = 15000.0f;
-static const float GYRO_HIGH = 26000.0f;
-static const float TILT_HIGH = 55.0f;    // degrees
-static const float STILL_MOTION_THRESHOLD = 1500.0f; // raw accel-magnitude jitter tolerated while "still"
-static const unsigned long STILL_WINDOW_MS = 3000;
-static const unsigned long IMPACT_COOLDOWN_MS = 5000; // ignore retriggers right after sending an event
-static const unsigned long SAMPLE_INTERVAL_MS = 10;   // ~100 Hz
-
-int bandOf(float value, float low, float high) {
-  if (value >= high) return 2;
-  if (value >= low) return 1;
-  return 0;
+void onCalibrateWrite(BLEDevice central, BLECharacteristic characteristic) {
+  runCalibration();
 }
 
 int severityFromScore(int score) {
-  // score ranges 0-6 (impact 0-2 + gyro 0-2 + tilt 0-1 + still 0-1) -> 1-5.
-  int severity = 1 + (int)round(score * 4.0f / 6.0f);
-  return constrain(severity, 1, 5);
+  if (score <= 1) return 1;
+  if (score == 2) return 2;
+  if (score == 3) return 3;
+  if (score == 4) return 4;
+  return 5;
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// Impact state machine
-// ───────────────────────────────────────────────────────────────────────
-enum class ImpactState { IDLE, WATCHING_STILLNESS, COOLDOWN };
-
-ImpactState state = ImpactState::IDLE;
-float restingMag = 16384.0f; // ~1g at power-on in raw counts; refined by a running baseline below
-float peakImpactMag = 0.0f;
-float peakGyroMag = 0.0f;
-float tiltAtImpact = 0.0f;
-bool stillnessBroken = false;
-unsigned long windowStartedAt = 0;
-unsigned long cooldownStartedAt = 0;
-
-void resetImpactWindow() {
-  peakImpactMag = 0.0f;
-  peakGyroMag = 0.0f;
-  tiltAtImpact = 0.0f;
-  stillnessBroken = false;
-}
-
-void sendCrashEvent(int severity, float impact, float gyro, float tilt, bool still) {
-  // Fixed field order/precision keeps payloads small and diffable in logs.
-  char json[PAYLOAD_MAX_LEN];
-  snprintf(
-    json, sizeof(json),
-    "{\"v\":%d,\"severity\":%d,\"impact\":%.1f,\"gyro\":%.1f,\"tilt\":%.1f,\"still\":%s}",
-    PAYLOAD_VERSION, severity, impact, gyro, tilt, still ? "true" : "false"
-  );
-
-  crashChar.writeValue(json);
-  Serial.print("[crash] sent: ");
+void sendReport(const char* type, const char* trigger, int severity,
+                float impactG, float gyroDps, float tilt, bool isStill) {
+  String json = "{";
+  json += "\"type\":\"" + String(type) + "\",";
+  if (trigger != nullptr) json += "\"trigger\":\"" + String(trigger) + "\",";
+  json += "\"severity\":" + String(severity) + ",";
+  json += "\"impact_g\":" + String(impactG, 3) + ",";
+  json += "\"gyro_dps\":" + String(gyroDps, 1) + ",";
+  json += "\"tilt\":" + String(tilt, 1) + ",";
+  json += "\"still\":" + String(isStill ? "true" : "false") + ",";
+  json += "\"calibrated\":" + String(calibrated ? "true" : "false");
+  json += "}";
   Serial.println(json);
+  crashChar.writeValue(json);
 }
 
 void setup() {
   Serial.begin(115200);
-  imuInit();
 
-  if (!BLE.begin()) {
-    Serial.println("BLE init failed — halting");
-    while (1) { delay(1000); }
+  if (bmi160.softReset() != BMI160_OK) {
+    Serial.println("sensor reset failed");
+    sensorOk = false;
+  }
+  if (sensorOk && bmi160.I2cInit(i2c_addr) != BMI160_OK) {
+    Serial.println("sensor init failed");
+    sensorOk = false;
   }
 
-  BLE.setLocalName(DEVICE_LOCAL_NAME);
+  loadCalibration();
+
+  if (!BLE.begin()) {
+    Serial.println("BLE failed");
+    while(1);
+  }
+  BLE.setLocalName("CrashDetector");
   BLE.setAdvertisedService(crashService);
   crashService.addCharacteristic(crashChar);
+  crashService.addCharacteristic(calibrateChar);
   BLE.addService(crashService);
-  crashChar.writeValue(""); // no event yet
+  calibrateChar.setEventHandler(BLEWritten, onCalibrateWrite);
   BLE.advertise();
 
-  Serial.println("CrashDetector advertising as \"CrashDetector\"");
+  Serial.println(sensorOk ? "Ready. Sensor OK." : "Ready. WARNING: sensor not responding.");
+  Serial.println(calibrated ? "Calibration loaded from memory." : "NOT CALIBRATED. Send calibrate command from app.");
 }
 
 void loop() {
-  static unsigned long lastSampleAt = 0;
-  unsigned long now = millis();
-  if (now - lastSampleAt < SAMPLE_INTERVAL_MS) {
-    BLE.poll();
-    return;
-  }
-  lastSampleAt = now;
   BLE.poll();
 
-  ImuSample sample;
-  if (!imuRead(sample)) return;
+  if (!sensorOk) { delay(500); return; }
 
-  float accelMag = vecMag(sample.ax, sample.ay, sample.az);
-  float gyroMag = vecMag(sample.gx, sample.gy, sample.gz);
-  float deviation = fabs(accelMag - restingMag);
+  int16_t accelGyro[6] = {0};
+  int rslt = bmi160.getAccelGyroData(accelGyro);
 
-  switch (state) {
-    case ImpactState::IDLE: {
-      // Slow running baseline so normal riding vibration doesn't drift into
-      // "impact" — only updated while nothing is happening.
-      restingMag = restingMag * 0.995f + accelMag * 0.005f;
-
-      if (deviation >= IMPACT_TRIGGER) {
-        resetImpactWindow();
-        peakImpactMag = deviation;
-        peakGyroMag = gyroMag;
-        tiltAtImpact = tiltFromVertical(sample);
-        windowStartedAt = now;
-        state = ImpactState::WATCHING_STILLNESS;
-        Serial.println("[crash] impact trigger — watching for stillness");
-      }
-      break;
+  if (rslt != 0) {
+    consecutiveFailures++;
+    if (consecutiveFailures >= FAULT_CONSECUTIVE_LIMIT && !faultReported) {
+      Serial.println("=== SENSOR FAULT ===");
+      String json = "{\"type\":\"fault\",\"reason\":\"sensor_communication_lost\"}";
+      Serial.println(json);
+      crashChar.writeValue(json);
+      faultReported = true;
     }
+    delay(10);
+    return;
+  }
+  if (consecutiveFailures >= FAULT_CONSECUTIVE_LIMIT && faultReported) {
+    String json = "{\"type\":\"fault_cleared\"}";
+    Serial.println(json);
+    crashChar.writeValue(json);
+    faultReported = false;
+  }
+  consecutiveFailures = 0;
 
-    case ImpactState::WATCHING_STILLNESS: {
-      peakImpactMag = max(peakImpactMag, deviation);
-      peakGyroMag = max(peakGyroMag, gyroMag);
-      if (deviation > STILL_MOTION_THRESHOLD) stillnessBroken = true;
+  float gx = accelGyro[0], gy = accelGyro[1], gz = accelGyro[2];
+  float ax = accelGyro[3], ay = accelGyro[4], az = accelGyro[5];
 
-      if (now - windowStartedAt >= STILL_WINDOW_MS) {
-        bool still = !stillnessBroken;
-        int score = bandOf(peakImpactMag, IMPACT_LOW, IMPACT_HIGH)
-                  + bandOf(peakGyroMag, GYRO_LOW, GYRO_HIGH)
-                  + (tiltAtImpact >= TILT_HIGH ? 1 : 0)
-                  + (still ? 1 : 0);
-        int severity = severityFromScore(score);
+  float impactMagRaw = sqrt(ax*ax + ay*ay + az*az);
+  float gyroMagRaw   = sqrt(gx*gx + gy*gy + gz*gz);
+  float impactG = impactMagRaw / ACCEL_LSB_PER_G;
+  float gyroDps = gyroMagRaw / GYRO_LSB_PER_DPS;
 
-        sendCrashEvent(severity, peakImpactMag, peakGyroMag, tiltAtImpact, still);
+  float refMag = sqrt(refX*refX + refY*refY + refZ*refZ);
+  float dot = (ax*refX + ay*refY + az*refZ);
+  float cosAngle = (refMag > 0 && impactMagRaw > 0) ? dot / (refMag * impactMagRaw) : 1.0;
+  cosAngle = constrain(cosAngle, -1.0, 1.0);
+  float tilt = acos(cosAngle) * 180.0 / 3.14159;
 
-        cooldownStartedAt = now;
-        state = ImpactState::COOLDOWN;
+  Serial.print("Impact: "); Serial.print(impactG, 2); Serial.print("g");
+  Serial.print("  Gyro: "); Serial.print(gyroDps, 1); Serial.print("dps");
+  Serial.print("  Tilt: "); Serial.println(tilt, 1);
+
+  float delta = abs(impactG - lastMagG);
+  lastMagG = impactG;
+  bool isStill = false;
+  if (delta < STILL_THRESH_G) {
+    if (stillSince == 0) stillSince = millis();
+    if (millis() - stillSince > STILL_WINDOW_MS) isStill = true;
+  } else {
+    stillSince = 0;
+  }
+
+  // Path 1: impact-triggered (existing behavior)
+  if (impactG > IMPACT_LOW_G && !wasImpact) {
+    wasImpact = true;
+    impactTime = millis();
+    Serial.println(">>> IMPACT DETECTED! Calculating severity...");
+  }
+  if (wasImpact && millis() - impactTime > 2000) {
+    int score = 0;
+    if (impactG > IMPACT_HIGH_G) score += 2; else if (impactG > IMPACT_LOW_G) score += 1;
+    if (gyroDps > GYRO_HIGH_DPS) score += 2; else if (gyroDps > GYRO_LOW_DPS) score += 1;
+    if (tilt > TILT_HIGH_DEG) score += 1;
+    if (isStill) score += 1;
+    sendReport("crash", "impact", severityFromScore(score), impactG, gyroDps, tilt, isStill);
+    wasImpact = false;
+    stillSince = 0;
+    extremeTiltSince = 0;
+    tiltIncidentReported = false;
+  }
+
+  // Path 2: sustained extreme tilt with no qualifying impact.
+  // Catches slow tip-overs and a sensor dislodged/thrown that lands
+  // at an implausible angle.
+  if (!wasImpact) {
+    if (tilt > TILT_EXTREME_DEG) {
+      if (extremeTiltSince == 0) extremeTiltSince = millis();
+      if (!tiltIncidentReported && millis() - extremeTiltSince > EXTREME_TILT_HOLD_MS) {
+        int score = 1;
+        if (gyroDps > GYRO_HIGH_DPS) score += 2; else if (gyroDps > GYRO_LOW_DPS) score += 1;
+        if (isStill) score += 1;
+        sendReport("crash", "tilt", severityFromScore(score), impactG, gyroDps, tilt, isStill);
+        tiltIncidentReported = true;
       }
-      break;
-    }
-
-    case ImpactState::COOLDOWN: {
-      if (now - cooldownStartedAt >= IMPACT_COOLDOWN_MS) {
-        state = ImpactState::IDLE;
-      }
-      break;
+    } else {
+      extremeTiltSince = 0;
+      tiltIncidentReported = false;
     }
   }
+
+  delay(10);
 }

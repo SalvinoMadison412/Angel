@@ -27,8 +27,10 @@ export type AppTabParamList = {
 export type RootStackParamList = {
   Tabs: undefined;
   DeviceSetup: undefined;
-  CalibrateSensor: undefined;
-  Calibration: undefined;
+  // `mandatory` drives whether the screen can be skipped — true right after
+  // a first connect to an uncalibrated device, absent/false for voluntary
+  // recalibration from the Device tab.
+  CalibrateSensor: { mandatory?: boolean } | undefined;
   CrashAlert: CrashEvent & { totalSeconds: number };
   LiveIncident: { incidentId: string };
   GuardianForm: { guardianId?: string };

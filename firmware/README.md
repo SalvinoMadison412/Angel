@@ -8,18 +8,16 @@ Arduino sketch for the ESP32-based crash sensor. Lives in
 - Arduino Nano ESP32 (or any board supported by `ArduinoBLE` + the ESP32
   Arduino core)
 - BMI160 accelerometer/gyroscope on I2C (SDA/SCL to the board's default I2C
-  pins), address `0x68` (SDO tied low)
+  pins), address `0x69`
 
 ## Libraries
 
 Install via the Arduino Library Manager:
 
 - `ArduinoBLE`
+- `DFRobot_BMI160`
 
-`Wire` ships with the Arduino core. The BMI160 is read via raw I2C register
-access (no sensor library dependency) — see the comment above `imuInit()`
-in the sketch for why it needs an explicit power-mode-normal command and a
-startup delay that a simpler chip like the MPU6050 wouldn't.
+`Wire` and `Preferences` ship with the ESP32 Arduino core.
 
 ## BLE contract
 
@@ -55,46 +53,70 @@ Device tab any time the sensor is remounted.
 
 ### Payload
 
-One JSON notification per detected impact — **not** a continuous stream:
+Every notification carries a `type` field, and the app branches on it before
+touching anything else about the message — a `fault` and a `crash` share no
+fields and must never be handled by the same code path. There is no `v`
+(schema version) field on this revision; `type` is what the app checks
+first, and an unrecognized shape is dropped rather than guessed at.
+
+#### `type: "crash"`
+
+One notification per detected event — **not** a continuous stream:
 
 ```json
 {
-  "v": 1,
+  "type": "crash",
+  "trigger": "impact",
   "severity": 3,
-  "impact": 28450.2,
-  "gyro": 19100.7,
+  "impact_g": 1.74,
+  "gyro_dps": 1165.3,
   "tilt": 42.1,
   "still": true,
   "calibrated": true
 }
 ```
 
-- `v` — payload schema version. Bump this if you add/rename/change the
-  meaning of a field, and update the app's parser to branch on it. The app
-  will reject any payload where `v` doesn't match what it expects, rather
-  than guessing.
+- `trigger` — `"impact"` (a hard impact spike) or `"tilt"` (a sustained
+  extreme tilt held for 4s with no qualifying impact — catches slow
+  tip-overs and a sensor that's been dislodged/thrown). These are different
+  situations and the app shows distinct copy for each.
 - `severity` — int 1-5, computed on-device from the ladder below.
-- `impact` — float, peak `|accel|` deviation from resting baseline, **raw
-  sensor units** (not converted to g).
-- `gyro` — float, peak `|gyro|` magnitude, **raw sensor units** (not
-  converted to deg/s).
+- `impact_g` — float, peak `|accel|` deviation from resting baseline,
+  already converted to g's on-device.
+- `gyro_dps` — float, peak `|gyro|` magnitude, already converted to
+  degrees/second on-device.
 - `tilt` — float, degrees of deviation from the calibrated mount reference
-  at the moment of impact. Only meaningful when `calibrated` is true — see
-  above.
-- `still` — bool, true if no significant motion was seen for 3s after impact.
+  at the moment of the event. Only meaningful when `calibrated` is true —
+  see above.
+- `still` — bool, true if no significant motion was seen for 3s after.
 - `calibrated` — bool, whether a mount reference has been stored via the
   calibrate characteristic. If false, ignore `tilt` — the device hasn't
   been zeroed yet, so it's degrees from the raw sensor axis instead.
 
+#### `type: "fault"` / `"fault_cleared"`
+
+```json
+{ "type": "fault", "reason": "sensor_communication_lost" }
+```
+```json
+{ "type": "fault_cleared" }
+```
+
+Sent when the IMU stops responding over I2C for `FAULT_CONSECUTIVE_LIMIT`
+(100) consecutive reads, and again once reads succeed again. This is a
+device-health problem, not a personal emergency — the app shows a banner on
+the Device screen and never routes this through the crash-alert/dispatch
+pipeline.
+
 ## On the severity score
 
-The 1-5 score is a hand-picked threshold ladder (`IMPACT_LOW/HIGH`,
-`GYRO_LOW/HIGH`, `TILT_HIGH`, `STILL_MOTION_THRESHOLD` in the sketch), not a
-model validated against real crash/non-crash data. It's a reasonable
+The 1-5 score is a hand-picked threshold ladder (`IMPACT_LOW_G/HIGH_G`,
+`GYRO_LOW_DPS/HIGH_DPS`, `TILT_HIGH_DEG`, `STILL_THRESH_G` in the sketch),
+not a model validated against real crash/non-crash data. It's a reasonable
 first-pass triage signal — don't present it as more precise than that (the
 app deliberately avoids things like "94% severity" for the same reason).
 
-The raw `(impact, gyro, tilt, still)` tuple is what's worth collecting for
+The `(impact_g, gyro_dps, tilt, still)` tuple is what's worth collecting for
 future calibration — the app logs every event locally, cancelled or not, for
 exactly this reason. If you want to improve the score later: log labeled
 rides, fit an ordinal classifier (or a manually tuned weighted sum with
@@ -110,10 +132,10 @@ the raw metrics.
    board; the community `esp32` core is a different package and isn't what
    this depends on).
 2. Tools → Board → select **Arduino Nano ESP32**, then select the port.
-3. Install `ArduinoBLE` via Library Manager.
+3. Install `ArduinoBLE` and `DFRobot_BMI160` via Library Manager.
 4. Open `CrashDetector.ino`, upload.
-5. Open the Serial Monitor at 115200 baud. On boot you should see
-   `CrashDetector advertising as "CrashDetector"` and no `[imu] warning:
-   unexpected CHIP_ID` line — if you do see that warning, double check the
-   BMI160's wiring/address before trusting any readings. Impact triggers
-   and sent payloads log here too while testing.
+5. Open the Serial Monitor at 115200 baud. On boot you should see `Ready.
+   Sensor OK.` — if you instead see `Ready. WARNING: sensor not
+   responding.` (or `sensor reset failed` / `sensor init failed` earlier in
+   the log), double check the BMI160's wiring/address before trusting any
+   readings. Crash triggers and sent payloads log here too while testing.

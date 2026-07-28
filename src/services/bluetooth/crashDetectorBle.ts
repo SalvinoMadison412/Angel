@@ -9,10 +9,11 @@ import {
   CRASH_CHARACTERISTIC_UUID,
   CRASH_SERVICE_UUID,
   CrashEvent,
+  DeviceFault,
   DEVICE_LOCAL_NAME,
   PairedDevice,
-  crashEventFromPayload,
-  crashPayloadSchema,
+  crashDetectorMessageSchema,
+  crashEventFromMessage,
 } from "./types";
 
 const PAIRED_DEVICE_KEY = "crashDetectorPairedDevice";
@@ -64,6 +65,13 @@ export interface CrashDetectorBle {
   calibrate(): Promise<void>;
   subscribeConnectionState(listener: (state: ConnectionState, errorMessage?: string) => void): () => void;
   subscribeCrashEvents(listener: (event: CrashEvent) => void): () => void;
+  /**
+   * Fires with a `DeviceFault` when the device reports a health problem
+   * (e.g. the IMU stopped responding), and with `null` when it reports that
+   * fault has cleared. This is a device-health signal, never routed through
+   * `subscribeCrashEvents` — a fault is not a crash.
+   */
+  subscribeFaultState(listener: (fault: DeviceFault | null) => void): () => void;
   /** True if Android and BLE scanning is likely to return nothing because location services are off. */
   isAndroidLocationServicesDisabled(): Promise<boolean>;
 }
@@ -107,6 +115,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   private connectedDevice: Device | null = null;
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
+  private faultListeners = new Set<(fault: DeviceFault | null) => void>();
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -255,6 +264,11 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     return () => this.eventListeners.delete(listener);
   }
 
+  subscribeFaultState(listener: (fault: DeviceFault | null) => void): () => void {
+    this.faultListeners.add(listener);
+    return () => this.faultListeners.delete(listener);
+  }
+
   async isAndroidLocationServicesDisabled(): Promise<boolean> {
     if (Platform.OS !== "android") return false;
     const enabled = await Location.hasServicesEnabledAsync();
@@ -278,14 +292,32 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       return;
     }
 
-    const result = crashPayloadSchema.safeParse(parsed);
+    const result = crashDetectorMessageSchema.safeParse(parsed);
     if (!result.success) {
       console.warn("[ble] malformed BLE payload (schema mismatch), dropping", result.error.message);
       return;
     }
 
-    const event = crashEventFromPayload(result.data);
-    this.eventListeners.forEach((listener) => listener(event));
+    // Branch on `type` before anything else touches the message — a fault
+    // and a crash share no fields and must never be handled by the same
+    // downstream path (a fault is a device-health problem, not an emergency).
+    const message = result.data;
+    switch (message.type) {
+      case "crash": {
+        const event = crashEventFromMessage(message);
+        this.eventListeners.forEach((listener) => listener(event));
+        return;
+      }
+      case "fault": {
+        const fault: DeviceFault = { reason: message.reason, receivedAt: Date.now() };
+        this.faultListeners.forEach((listener) => listener(fault));
+        return;
+      }
+      case "fault_cleared": {
+        this.faultListeners.forEach((listener) => listener(null));
+        return;
+      }
+    }
   }
 
   private handleUnexpectedDisconnect(deviceId: string, deviceName: string) {

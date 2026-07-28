@@ -22,10 +22,9 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 /**
  * Runs once after signup, before the main app — collects what actually
  * matters for an emergency response (see AGENTS.md's onboarding brief).
- * One wizard component with internal step state, matching the existing
- * CalibrationWizard pattern rather than a separate nav stack: there's no
- * "back" between steps, and resuming is driven by profiles.onboarding_step,
- * not by pushed routes.
+ * One wizard component with internal step state rather than a separate nav
+ * stack: there's no "back" between steps, and resuming is driven by
+ * profiles.onboarding_step, not by pushed routes.
  */
 export function OnboardingScreen() {
   const profile = useProfile();

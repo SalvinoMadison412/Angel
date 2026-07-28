@@ -1,21 +1,30 @@
-import { useNavigation } from "@react-navigation/native";
-import React, { useState } from "react";
-import { ActivityIndicator, StyleSheet, Text } from "react-native";
+import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, BackHandler, StyleSheet, Text } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
 import { useCrashDetector, useDevice } from "../../hooks";
 import { colors, spacing, type } from "../../theme";
-import { RootStackNavigation } from "../../navigation/types";
+import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 
 type Status = "idle" | "calibrating" | "success" | "error";
 
 /**
  * Reused for both first-time setup (pushed by DeviceSetupScreen right
- * after a successful pair) and later recalibration (reachable from the
- * Device tab) — the only difference is copy, driven by whether the
- * device's stored `calibrated` flag is already true.
+ * after a successful pair, with `mandatory: true`) and later recalibration
+ * (reachable from the Device tab, no param) — the only difference is copy
+ * plus whether it can be skipped, driven by whether the device's stored
+ * `calibrated` flag is already true.
+ *
+ * `mandatory` blocks the skip button and back navigation so uncalibrated
+ * tilt data can't slip through unnoticed — but only while nothing has gone
+ * wrong yet. Once a calibration attempt actually fails, the escape hatches
+ * come back so a genuinely broken sensor doesn't trap the rider on this
+ * screen with no way out.
  */
 export function CalibrateSensorScreen() {
   const navigation = useNavigation<RootStackNavigation>();
+  const route = useRoute<RouteProp<RootStackParamList, "CalibrateSensor">>();
+  const mandatory = route.params?.mandatory ?? false;
   const { connectionState, calibrate } = useCrashDetector();
   const { data: device, ensureDevice, setCalibrated } = useDevice();
 
@@ -24,6 +33,13 @@ export function CalibrateSensorScreen() {
 
   const isRecalibration = Boolean(device?.calibrated);
   const connected = connectionState === "connected";
+  const canLeave = !mandatory || status === "error";
+
+  useEffect(() => {
+    if (canLeave) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+    return () => subscription.remove();
+  }, [canLeave]);
 
   const handleCalibrate = async () => {
     setStatus("calibrating");
@@ -45,8 +61,17 @@ export function CalibrateSensorScreen() {
     <ScreenBackground scroll contentStyle={styles.content}>
       <ScreenHeader
         title={isRecalibration ? "RECALIBRATE SENSOR" : "CALIBRATE SENSOR"}
-        onBack={() => navigation.goBack()}
+        onBack={canLeave ? () => navigation.goBack() : undefined}
       />
+
+      {mandatory && (status === "idle" || status === "calibrating") && (
+        <GlassCard accentBorder>
+          <Text style={[type.kicker, styles.accentText]}>REQUIRED BEFORE YOU RIDE</Text>
+          <Text style={[type.bodySmall, styles.copy, styles.hint]}>
+            Tilt readings are meaningless without this — calibrate now so a crash reading can be trusted.
+          </Text>
+        </GlassCard>
+      )}
 
       {!connected && status !== "success" && (
         <GlassCard accentBorder>
@@ -74,7 +99,7 @@ export function CalibrateSensorScreen() {
           </GlassCard>
 
           <PillButton title="CALIBRATE" onPress={handleCalibrate} disabled={!connected} style={styles.cta} />
-          <PillButton title="SKIP FOR NOW" variant="ghost" onPress={() => navigation.goBack()} />
+          {canLeave && <PillButton title="SKIP FOR NOW" variant="ghost" onPress={() => navigation.goBack()} />}
         </>
       )}
 
@@ -117,6 +142,7 @@ export function CalibrateSensorScreen() {
 const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
   dim: { color: colors.textDim },
+  accentText: { color: colors.accent },
   copy: { color: colors.textMuted },
   hint: { marginTop: spacing.md },
   cta: { marginTop: spacing.sm },
