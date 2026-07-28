@@ -1,5 +1,8 @@
 -- Angel — initial schema, RLS, triggers, and mock responder seed data.
 -- Paste this whole file into the Supabase SQL Editor (project → SQL Editor → New query) and run it once.
+-- Safe to re-run: every statement either guards itself (IF NOT EXISTS /
+-- OR REPLACE) or drops-then-recreates, so running this twice is a no-op,
+-- not an error.
 
 create extension if not exists "pgcrypto";
 
@@ -17,10 +20,13 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
   for select using (auth.uid() = id);
+drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own" on public.profiles
   for update using (auth.uid() = id);
+drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own" on public.profiles
   for insert with check (auth.uid() = id);
 
@@ -59,12 +65,16 @@ create table if not exists public.devices (
 
 alter table public.devices enable row level security;
 
+drop policy if exists "devices_select_own" on public.devices;
 create policy "devices_select_own" on public.devices
   for select using (auth.uid() = owner_id);
+drop policy if exists "devices_insert_own" on public.devices;
 create policy "devices_insert_own" on public.devices
   for insert with check (auth.uid() = owner_id);
+drop policy if exists "devices_update_own" on public.devices;
 create policy "devices_update_own" on public.devices
   for update using (auth.uid() = owner_id);
+drop policy if exists "devices_delete_own" on public.devices;
 create policy "devices_delete_own" on public.devices
   for delete using (auth.uid() = owner_id);
 
@@ -85,12 +95,16 @@ create table if not exists public.guardians (
 
 alter table public.guardians enable row level security;
 
+drop policy if exists "guardians_select_own" on public.guardians;
 create policy "guardians_select_own" on public.guardians
   for select using (auth.uid() = user_id);
+drop policy if exists "guardians_insert_own" on public.guardians;
 create policy "guardians_insert_own" on public.guardians
   for insert with check (auth.uid() = user_id);
+drop policy if exists "guardians_update_own" on public.guardians;
 create policy "guardians_update_own" on public.guardians
   for update using (auth.uid() = user_id);
+drop policy if exists "guardians_delete_own" on public.guardians;
 create policy "guardians_delete_own" on public.guardians
   for delete using (auth.uid() = user_id);
 
@@ -99,7 +113,7 @@ create policy "guardians_delete_own" on public.guardians
 -- ─────────────────────────────────────────────────────────────────────────
 create table if not exists public.responders (
   id uuid primary key default gen_random_uuid(),
-  name text not null,
+  name text not null unique,
   type text not null check (type in ('gig_partner', 'auto', 'car_uber')),
   platform_label text,
   rating numeric,
@@ -111,6 +125,7 @@ create table if not exists public.responders (
 
 alter table public.responders enable row level security;
 
+drop policy if exists "responders_select_all" on public.responders;
 create policy "responders_select_all" on public.responders
   for select using (true);
 
@@ -133,10 +148,13 @@ create table if not exists public.incidents (
 
 alter table public.incidents enable row level security;
 
+drop policy if exists "incidents_select_own" on public.incidents;
 create policy "incidents_select_own" on public.incidents
   for select using (auth.uid() = user_id);
+drop policy if exists "incidents_insert_own" on public.incidents;
 create policy "incidents_insert_own" on public.incidents
   for insert with check (auth.uid() = user_id);
+drop policy if exists "incidents_update_own" on public.incidents;
 create policy "incidents_update_own" on public.incidents
   for update using (auth.uid() = user_id);
 
@@ -152,6 +170,7 @@ create table if not exists public.incident_events (
 
 alter table public.incident_events enable row level security;
 
+drop policy if exists "incident_events_select_own" on public.incident_events;
 create policy "incident_events_select_own" on public.incident_events
   for select using (
     exists (
@@ -159,6 +178,7 @@ create policy "incident_events_select_own" on public.incident_events
       where i.id = incident_events.incident_id and i.user_id = auth.uid()
     )
   );
+drop policy if exists "incident_events_insert_own" on public.incident_events;
 create policy "incident_events_insert_own" on public.incident_events
   for insert with check (
     exists (
@@ -183,10 +203,13 @@ create table if not exists public.subscriptions (
 
 alter table public.subscriptions enable row level security;
 
+drop policy if exists "subscriptions_select_own" on public.subscriptions;
 create policy "subscriptions_select_own" on public.subscriptions
   for select using (auth.uid() = user_id);
+drop policy if exists "subscriptions_insert_own" on public.subscriptions;
 create policy "subscriptions_insert_own" on public.subscriptions
   for insert with check (auth.uid() = user_id);
+drop policy if exists "subscriptions_update_own" on public.subscriptions;
 create policy "subscriptions_update_own" on public.subscriptions
   for update using (auth.uid() = user_id);
 
@@ -215,11 +238,26 @@ create trigger on_subscription_upsert
 -- ─────────────────────────────────────────────────────────────────────────
 -- Realtime — the Live Incident Tracking screen subscribes to these.
 -- ─────────────────────────────────────────────────────────────────────────
-alter publication supabase_realtime add table public.incidents;
-alter publication supabase_realtime add table public.incident_events;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'incidents'
+  ) then
+    alter publication supabase_realtime add table public.incidents;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'incident_events'
+  ) then
+    alter publication supabase_realtime add table public.incident_events;
+  end if;
+end $$;
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- Seed mock responders (Bengaluru), since the partner app doesn't exist yet.
+-- `name` is unique so re-running this doesn't pile up duplicate rows.
 -- ─────────────────────────────────────────────────────────────────────────
 insert into public.responders (name, type, platform_label, rating, vehicle_label, lat, lng, available)
 values
@@ -228,4 +266,4 @@ values
   ('Fahad K.', 'gig_partner', 'Rapido Captain', 4.8, 'KA-01 EF 4471', 12.9690, 77.5910, true),
   ('Ganesh Auto', 'auto', 'BMTC Auto Union', 4.6, 'KA-04 AB 1123', 12.9735, 77.5985, true),
   ('Uber — Suresh N.', 'car_uber', 'Uber', 4.85, 'KA-02 CX 7790', 12.9705, 77.5940, true)
-on conflict do nothing;
+on conflict (name) do nothing;
