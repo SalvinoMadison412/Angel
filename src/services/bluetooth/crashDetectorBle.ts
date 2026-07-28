@@ -4,6 +4,7 @@ import * as base64 from "base-64";
 import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
 import {
+  CALIBRATE_CHARACTERISTIC_UUID,
   ConnectionState,
   CRASH_CHARACTERISTIC_UUID,
   CRASH_SERVICE_UUID,
@@ -17,6 +18,25 @@ import {
 const PAIRED_DEVICE_KEY = "crashDetectorPairedDevice";
 const SCAN_TIMEOUT_MS = 15000;
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
+const CALIBRATE_TIMEOUT_MS = 5000;
+// Value is arbitrary — the device only cares that a write happened.
+const CALIBRATE_TRIGGER_BYTE = "\x01";
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
 
 export interface DiscoveredDevice {
   id: string;
@@ -34,6 +54,14 @@ export interface CrashDetectorBle {
   connect(deviceId: string, deviceName: string): Promise<void>;
   disconnect(): Promise<void>;
   forgetDevice(): Promise<void>;
+  /**
+   * Writes to the calibrate characteristic, telling the device to average
+   * ~1s of accelerometer samples and store the result as its new "neutral
+   * mount orientation" reference. Rejects (without leaving the connection
+   * in a bad state) if the device isn't connected or doesn't respond in
+   * time — callers should surface that as a retry-able failure, not a crash.
+   */
+  calibrate(): Promise<void>;
   subscribeConnectionState(listener: (state: ConnectionState, errorMessage?: string) => void): () => void;
   subscribeCrashEvents(listener: (event: CrashEvent) => void): () => void;
   /** True if Android and BLE scanning is likely to return nothing because location services are off. */
@@ -195,6 +223,20 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       }
     }
     this.setConnectionState("disconnected");
+  }
+
+  async calibrate(): Promise<void> {
+    const device = this.connectedDevice;
+    if (!device) {
+      throw new Error("Not connected to a device");
+    }
+
+    const valueBase64 = base64.encode(CALIBRATE_TRIGGER_BYTE);
+    await withTimeout(
+      device.writeCharacteristicWithResponseForService(CRASH_SERVICE_UUID, CALIBRATE_CHARACTERISTIC_UUID, valueBase64),
+      CALIBRATE_TIMEOUT_MS,
+      "Calibration timed out — check the device is still connected and try again"
+    );
   }
 
   async forgetDevice(): Promise<void> {

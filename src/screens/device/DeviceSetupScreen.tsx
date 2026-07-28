@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader, Tag } from "../../components";
-import { useCrashDetector } from "../../hooks";
+import { useCrashDetector, useDevice } from "../../hooks";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation } from "../../navigation/types";
 
@@ -26,13 +26,27 @@ export function DeviceSetupScreen() {
     forgetDevice,
     checkAndroidLocationServicesDisabled,
   } = useCrashDetector();
+  const { data: device } = useDevice();
 
   const [hasScanned, setHasScanned] = useState(false);
   const [locationServicesOff, setLocationServicesOff] = useState(false);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const stopScanRef = useRef<(() => void) | null>(null);
+  const hasPromptedCalibration = useRef(false);
 
   useEffect(() => () => stopScanRef.current?.(), []);
+
+  // First time a connection lands, send the rider straight into
+  // calibration if the device hasn't ever completed it — the sensor's
+  // tilt reading is meaningless until it has a mounting reference. Fires
+  // once per screen visit so it doesn't re-trigger on every render.
+  useEffect(() => {
+    if (connectionState !== "connected" || hasPromptedCalibration.current) return;
+    hasPromptedCalibration.current = true;
+    if (!device?.calibrated) {
+      navigation.navigate("CalibrateSensor");
+    }
+  }, [connectionState, device?.calibrated, navigation]);
 
   const handleScan = () => {
     setHasScanned(true);
@@ -138,6 +152,20 @@ export function DeviceSetupScreen() {
         </GlassCard>
       )}
 
+      {isPaired && !device?.calibrated && (
+        <GlassCard accentBorder>
+          <Text style={[type.kicker, styles.dim]}>SENSOR NOT CALIBRATED</Text>
+          <Text style={[type.bodySmall, styles.copy]}>
+            Tilt readings won't be reliable until the sensor's mounting position is calibrated.
+          </Text>
+          <PillButton
+            title="CALIBRATE SENSOR"
+            onPress={() => navigation.navigate("CalibrateSensor")}
+            style={styles.calibrateButton}
+          />
+        </GlassCard>
+      )}
+
       {isPaired && (
         <PillButton title="FORGET DEVICE" variant="outline" onPress={handleForget} />
       )}
@@ -177,4 +205,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1,
   },
+  calibrateButton: { marginTop: spacing.md },
 });

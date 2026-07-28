@@ -55,6 +55,8 @@ export function useCrashDetector(options?: { mock?: boolean }) {
 
   const disconnect = useCallback(() => service.disconnect(), [service]);
 
+  const calibrate = useCallback(() => service.calibrate(), [service]);
+
   const forgetDevice = useCallback(async () => {
     await service.forgetDevice();
     setPairedDevice(null);
@@ -79,6 +81,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     scan,
     connect,
     disconnect,
+    calibrate,
     forgetDevice,
     checkAndroidLocationServicesDisabled,
     simulateCrash,

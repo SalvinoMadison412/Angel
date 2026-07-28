@@ -8,7 +8,7 @@ import { responderTypesForSeverity } from "../../hooks/useResponders";
 import { cancelCrashEvent, confirmIncident } from "../../services/emergency";
 import { notificationService } from "../../services/notifications";
 import { etaMinutes, haversineKm } from "../../lib/geo";
-import { colors, severityColor, spacing, type } from "../../theme";
+import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 import { initialsFor } from "../../hooks/useGuardians";
 
@@ -23,10 +23,10 @@ const SEVERITY_LABELS: Record<number, string> = {
 export function CrashAlertScreen() {
   const navigation = useNavigation<RootStackNavigation>();
   const route = useRoute<RouteProp<RootStackParamList, "CrashAlert">>();
-  const { severity, impact, gyro, tilt, still, receivedAt, totalSeconds } = route.params;
+  const { severity, impact, gyro, tilt, still, calibrated, receivedAt, totalSeconds } = route.params;
   const event = useMemo(
-    () => ({ severity, impact, gyro, tilt, still, receivedAt }),
-    [severity, impact, gyro, tilt, still, receivedAt]
+    () => ({ severity, impact, gyro, tilt, still, calibrated, receivedAt }),
+    [severity, impact, gyro, tilt, still, calibrated, receivedAt]
   );
 
   const { session } = useAuth();
@@ -118,11 +118,23 @@ export function CrashAlertScreen() {
         <View style={styles.severitySection}>
           <View style={styles.severityHeaderRow}>
             <Text style={[type.kicker, styles.dim]}>SEVERITY</Text>
-            <Text style={[type.kicker, { color: severityColor(severity) }]}>{SEVERITY_LABELS[severity]}</Text>
+            <Text style={[type.kicker, { color: calibrated ? severityColor(severity) : colors.textMuted }]}>
+              {SEVERITY_LABELS[severity]}
+            </Text>
           </View>
           <SeverityMeter severity={severity} />
+          {!calibrated && (
+            <View style={styles.uncalibratedBanner}>
+              <Text style={[type.kicker, styles.uncalibratedText]}>⚠ SENSOR NOT CALIBRATED</Text>
+              <Text style={[type.bodySmall, styles.uncalibratedCopy]}>
+                The sensor's mounting reference wasn't set when this was detected — tilt wasn't measurable, so the
+                severity above may be off.
+              </Text>
+            </View>
+          )}
           <Text style={[type.label, styles.metaRow]}>
-            IMPACT {impact.toFixed(0)}   GYRO {gyro.toFixed(0)}   TILT {tilt.toFixed(0)}°{still ? "   STILL" : ""}
+            IMPACT {impact.toFixed(0)}   GYRO {gyro.toFixed(0)}   TILT {calibrated ? `${tilt.toFixed(0)}°` : "—"}
+            {still ? "   STILL" : ""}
           </Text>
           <Text style={[type.bodySmall, styles.caveat]}>
             Severity is a rough 1-5 triage signal from on-device thresholds, not a precise or medically validated
@@ -176,6 +188,16 @@ const styles = StyleSheet.create({
   dim: { color: colors.textDim },
   metaRow: { color: colors.textMuted, marginTop: spacing.md },
   caveat: { color: colors.textDim, marginTop: spacing.sm },
+  uncalibratedBanner: {
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentMuted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  uncalibratedText: { color: colors.accent },
+  uncalibratedCopy: { color: colors.textMuted, marginTop: spacing.xs },
   countdownWrap: { marginTop: spacing.lg },
   copy: { color: colors.textMuted, textAlign: "center", paddingHorizontal: spacing.lg },
   chipRow: { flexDirection: "row", gap: spacing.sm },

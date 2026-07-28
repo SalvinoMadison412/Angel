@@ -51,6 +51,28 @@ export function DeviceScreen() {
       </GlassCard>
 
       <GlassCard>
+        <Text style={[type.kicker, styles.dim]}>SENSOR CALIBRATION</Text>
+        <View style={styles.statusRow}>
+          <Text style={[type.title, styles.statusText]}>{device?.calibrated ? "CALIBRATED" : "NOT CALIBRATED"}</Text>
+          <Tag
+            label={device?.calibrated ? "READY" : "ACTION NEEDED"}
+            variant={device?.calibrated ? "accent" : "neutral"}
+          />
+        </View>
+        <Text style={[type.bodySmall, styles.hint]}>
+          {device?.calibrated
+            ? "Recalibrate any time the sensor is remounted — a battery swap, a fall that shifts the mount, or a new bike."
+            : "Tilt readings from a crash aren't reliable until the sensor's mounting position is calibrated."}
+        </Text>
+        <PillButton
+          title={device?.calibrated ? "RECALIBRATE SENSOR" : "CALIBRATE SENSOR"}
+          variant="outline"
+          onPress={() => navigation.navigate("CalibrateSensor")}
+          style={styles.pairButton}
+        />
+      </GlassCard>
+
+      <GlassCard>
         <Text style={[type.kicker, styles.dim]}>PAIRING STATUS</Text>
         <View style={styles.statusRow}>
           <Text style={[type.title, styles.statusText]}>

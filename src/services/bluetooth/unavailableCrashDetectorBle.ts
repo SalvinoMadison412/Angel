@@ -36,6 +36,10 @@ export class UnavailableCrashDetectorBleService implements CrashDetectorBle {
 
   async disconnect(): Promise<void> {}
 
+  async calibrate(): Promise<void> {
+    throw new Error(MESSAGE);
+  }
+
   async forgetDevice(): Promise<void> {}
 
   subscribeConnectionState(listener: (state: ConnectionState, errorMessage?: string) => void): () => void {

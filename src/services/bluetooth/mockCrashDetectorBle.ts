@@ -49,6 +49,13 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
     this.setConnectionState("disconnected");
   }
 
+  async calibrate(): Promise<void> {
+    if (this.connectionState !== "connected") {
+      throw new Error("Not connected to a device");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // mirrors the ~1s the real device spends averaging samples
+  }
+
   async forgetDevice(): Promise<void> {
     this.paired = null;
     this.setConnectionState("disconnected");
@@ -76,6 +83,7 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
       gyro: 19000,
       tilt: 40,
       still: true,
+      calibrated: true,
       ...event,
       receivedAt: Date.now(),
     };

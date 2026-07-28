@@ -20,6 +20,7 @@ export type AppTabParamList = {
 export type RootStackParamList = {
   Tabs: undefined;
   DeviceSetup: undefined;
+  CalibrateSensor: undefined;
   Calibration: undefined;
   CrashAlert: CrashEvent & { totalSeconds: number };
   LiveIncident: { incidentId: string };

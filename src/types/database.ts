@@ -20,6 +20,12 @@ export interface Device {
   calibration_offset_y: number;
   calibration_offset_z: number;
   pairing_status: PairingStatus;
+  // Whether the sensor's on-device "neutral mount orientation" reference
+  // has been set via BLE (CalibrateSensorScreen) — separate from the
+  // pitch/roll/yaw offsets above. Until true, telemetry's `tilt` field is
+  // degrees from the sensor's raw axis, not from the bike's actual resting
+  // angle, and shouldn't be trusted.
+  calibrated: boolean;
   created_at: string;
 }
 
@@ -58,6 +64,10 @@ export interface Incident {
   gyro: number | null;
   tilt: number | null;
   still: boolean | null;
+  // Whether the sensor had a calibrated mount reference at the moment of
+  // this specific event — null for incidents recorded before this field
+  // existed. If false, `tilt` above is not meaningful for this incident.
+  calibrated: boolean | null;
   status: IncidentStatus;
   lat: number | null;
   lng: number | null;

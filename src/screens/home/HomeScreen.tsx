@@ -17,6 +17,7 @@ function mockMetricsForSeverity(severity: number) {
     gyro: 9000 + severity * 3200,
     tilt: 20 + severity * 9,
     still: severity >= 3,
+    calibrated: true, // debug panel always simulates a calibrated sensor
   };
 }
 

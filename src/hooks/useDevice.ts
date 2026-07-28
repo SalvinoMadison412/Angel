@@ -55,5 +55,14 @@ export function useDevice() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["device", userId] }),
   });
 
-  return { ...query, ensureDevice, saveCalibration };
+  const setCalibrated = useMutation({
+    mutationFn: async (calibrated: boolean) => {
+      if (!query.data) throw new Error("No device to update");
+      const { error } = await supabase.from("devices").update({ calibrated }).eq("id", query.data.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["device", userId] }),
+  });
+
+  return { ...query, ensureDevice, saveCalibration, setCalibrated };
 }

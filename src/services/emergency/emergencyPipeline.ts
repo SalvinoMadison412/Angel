@@ -79,6 +79,7 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
       gyro: event.gyro,
       tilt: event.tilt,
       still: event.still,
+      calibrated: event.calibrated,
       lat,
       lng,
       status: "active",

@@ -1,7 +1,7 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { Share, StyleSheet, Text, View } from "react-native";
-import { GlassCard, PillButton, RouteMap, ScreenBackground, ScreenHeader } from "../../components";
+import { GlassCard, PillButton, RouteMap, ScreenBackground, ScreenHeader, Tag } from "../../components";
 import { useIncident, useIncidentEvents, useResponders } from "../../hooks";
 import { etaMinutes, haversineKm } from "../../lib/geo";
 import { colors, spacing, type } from "../../theme";
@@ -61,9 +61,12 @@ export function LiveIncidentScreen() {
       <ScreenHeader onBack={() => navigation.popToTop()} />
       <View style={styles.headerBlock}>
         <Text style={[type.kicker, styles.dim]}>INCIDENT #{incident.id.slice(0, 4).toUpperCase()}</Text>
-        <Text style={[type.body, styles.severityLine]}>
-          SEVERITY {incident.severity} · {SEVERITY_LABELS[incident.severity]}
-        </Text>
+        <View style={styles.severityRow}>
+          <Text style={[type.body, styles.severityLine]}>
+            SEVERITY {incident.severity} · {SEVERITY_LABELS[incident.severity]}
+          </Text>
+          {incident.calibrated === false && <Tag label="SENSOR UNCALIBRATED" variant="outline" />}
+        </View>
       </View>
 
       <View style={styles.mapWrap}>
@@ -134,7 +137,8 @@ const styles = StyleSheet.create({
   loadingText: { color: colors.textMuted },
   headerBlock: { paddingHorizontal: spacing.xl, marginBottom: spacing.md },
   dim: { color: colors.textDim },
-  severityLine: { color: colors.text, marginTop: spacing.xs },
+  severityRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.xs },
+  severityLine: { color: colors.text },
   mapWrap: { paddingHorizontal: spacing.xl },
   responderCard: { marginHorizontal: spacing.xl, marginTop: spacing.lg },
   responderTopRow: { flexDirection: "row", justifyContent: "space-between" },

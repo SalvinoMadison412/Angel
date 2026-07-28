@@ -23,13 +23,14 @@ startup delay that a simpler chip like the MPU6050 wouldn't.
 
 ## BLE contract
 
-The sketch advertises as **`CrashDetector`** with one custom service/characteristic
-pair:
+The sketch advertises as **`CrashDetector`** with one custom service and two
+characteristics:
 
 | | UUID |
 |---|---|
 | Service | `9a0d2e10-66dd-4d3d-930e-a4d0e2806c51` |
-| Characteristic (read + notify) | `9a0d2e11-66dd-4d3d-930e-a4d0e2806c51` |
+| Telemetry characteristic (read + notify) | `9a0d2e11-66dd-4d3d-930e-a4d0e2806c51` |
+| Calibrate characteristic (write) | `9a0d2e12-66dd-4d3d-930e-a4d0e2806c51` |
 
 These are **not** standard Bluetooth SIG UUIDs. An earlier revision reused the
 GATT Heart Rate Service (`180D`) / Heart Rate Measurement characteristic
@@ -38,6 +39,19 @@ some OS BLE stacks, because they apply special parsing/caching to recognized
 profiles. If you ever regenerate these UUIDs (`uuidgen`), update
 `src/services/bluetooth/types.ts` in the app repo to match — firmware and app
 must agree.
+
+### Calibrating the mount
+
+Every bike mounts the sensor at a different angle, so raw tilt off the
+sensor's own Z-axis is meaningless on its own — 70° could be a real fall on
+one bike and normal parked orientation on another. Writing any single byte
+to the calibrate characteristic tells the device to average ~50
+accelerometer samples (~1s) and store the result as its "neutral mount
+orientation" reference in flash (`Preferences`/NVS), surviving power loss
+between rides. From then on, telemetry's `tilt` field is degrees of
+deviation from *that* reference, not from vertical. The app's
+`CalibrateSensorScreen` triggers this after pairing and again from the
+Device tab any time the sensor is remounted.
 
 ### Payload
 
@@ -50,7 +64,8 @@ One JSON notification per detected impact — **not** a continuous stream:
   "impact": 28450.2,
   "gyro": 19100.7,
   "tilt": 42.1,
-  "still": true
+  "still": true,
+  "calibrated": true
 }
 ```
 
@@ -63,8 +78,13 @@ One JSON notification per detected impact — **not** a continuous stream:
   sensor units** (not converted to g).
 - `gyro` — float, peak `|gyro|` magnitude, **raw sensor units** (not
   converted to deg/s).
-- `tilt` — float, degrees from vertical at the moment of impact.
+- `tilt` — float, degrees of deviation from the calibrated mount reference
+  at the moment of impact. Only meaningful when `calibrated` is true — see
+  above.
 - `still` — bool, true if no significant motion was seen for 3s after impact.
+- `calibrated` — bool, whether a mount reference has been stored via the
+  calibrate characteristic. If false, ignore `tilt` — the device hasn't
+  been zeroed yet, so it's degrees from the raw sensor axis instead.
 
 ## On the severity score
 
