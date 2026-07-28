@@ -1,10 +1,10 @@
 import { useNavigation } from "@react-navigation/native";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { GlassCard, HoloMotorcycle, ScreenBackground, StatTile } from "../../components";
 import { useCrashDetector, useCurrentSubscription, useDevice, useGuardians } from "../../hooks";
 import { daysLeft } from "../../hooks/useSubscription";
-import { sensorDataSource, SensorReading } from "../../services/sensors";
+import { CrashEvent, impactToGForce } from "../../services/bluetooth";
 import { colors, fontFamily, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
 
@@ -21,26 +21,56 @@ function mockMetricsForSeverity(severity: number) {
   };
 }
 
+const formatReadingTime = (receivedAt: number) => new Date(receivedAt).toLocaleTimeString("en-IN", { hour12: false });
+
+// The firmware only notifies once per detected impact, not on a continuous
+// stream (see firmware/CrashDetector/CrashDetector.ino) — so these tiles show
+// the most recent real reading, not a live gauge. Never render a value that
+// didn't come from an actual BLE payload.
+type ReadingTile = { kind: "empty"; message: string } | { kind: "value"; value: string; unit: string; caption: string };
+
+function gForceTile(lastEvent: CrashEvent | null, connected: boolean): ReadingTile {
+  if (!lastEvent) return { kind: "empty", message: connected ? "No readings yet" : "No device connected" };
+  return {
+    kind: "value",
+    value: impactToGForce(lastEvent.impact).toFixed(2),
+    unit: "G",
+    caption: `LAST IMPACT · ${formatReadingTime(lastEvent.receivedAt)}`,
+  };
+}
+
+function leanTile(lastEvent: CrashEvent | null, connected: boolean): ReadingTile {
+  if (!lastEvent) return { kind: "empty", message: connected ? "No readings yet" : "No device connected" };
+  if (!lastEvent.calibrated) return { kind: "empty", message: "Not calibrated" };
+  return {
+    kind: "value",
+    value: String(Math.round(lastEvent.tilt)),
+    unit: "DEG",
+    caption: `LAST IMPACT · ${formatReadingTime(lastEvent.receivedAt)}`,
+  };
+}
+
 export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: device } = useDevice();
   const { data: guardians } = useGuardians();
   const { data: subscription } = useCurrentSubscription();
+  const { connectionState, lastEvent } = useCrashDetector();
   const { simulateCrash } = useCrashDetector({ mock: true });
 
-  const [reading, setReading] = useState<SensorReading | null>(null);
-
-  useEffect(() => {
-    const unsubscribe = sensorDataSource.subscribe(setReading);
-    return unsubscribe;
-  }, []);
-
   const isLinked = device?.pairing_status === "paired";
+  const isConnected = connectionState === "connected";
+
+  const gTile = gForceTile(lastEvent, isConnected);
+  const lTile = leanTile(lastEvent, isConnected);
+  const leanDeg = lastEvent && lastEvent.calibrated ? lastEvent.tilt / 4 : 0;
 
   // Feeds the mock BLE stream rather than writing an incident directly —
   // this exercises the exact same app-root listener → CrashAlertScreen →
   // emergencyPipeline path a real sensor would, just without a physical
-  // crash. See src/services/bluetooth/mockCrashDetectorBle.ts.
+  // crash. See src/services/bluetooth/mockCrashDetectorBle.ts. Deliberately
+  // kept separate from the real `useCrashDetector()` above so a debug tap
+  // never shows up as a "real" reading on this screen.
   const handleSimulateCrash = (severity: number) => {
     simulateCrash?.({ severity: severity as 1 | 2 | 3 | 4 | 5, ...mockMetricsForSeverity(severity) });
   };
@@ -62,24 +92,38 @@ export function HomeScreen() {
           <Text style={[type.title, styles.statusHeading]}>SYSTEM ACTIVE</Text>
         </View>
         <Text style={[type.body, styles.statusBody]}>
-          You're protected. Impact, lean angle and speed are being monitored at 100 Hz.
+          You're protected. The sensor watches impact and lean at 100 Hz on-device and only reports back when it
+          detects one.
         </Text>
       </GlassCard>
 
       <GlassCard style={styles.telemetryCard} padded={false}>
         <View style={styles.telemetryHeader}>
           <Text style={[type.kicker, styles.dimText]}>LIGHT-CYCLE // TELEMETRY</Text>
-          <Text style={[type.kicker, styles.sensorOk]}>SENSOR OK</Text>
+          <Text style={[type.kicker, isConnected ? styles.sensorOk : styles.dimText]}>
+            {isConnected ? "SENSOR OK" : "SENSOR OFFLINE"}
+          </Text>
         </View>
         <View style={styles.motifWrap}>
-          <HoloMotorcycle leanDeg={reading ? reading.leanAngleDeg / 4 : 0} />
+          <HoloMotorcycle leanDeg={leanDeg} />
         </View>
       </GlassCard>
 
       <View style={styles.statRow}>
-        <StatTile label="G-FORCE" value={(reading?.gForce ?? 0).toFixed(2)} unit="G" />
-        <StatTile label="LEAN" value={String(reading?.leanAngleDeg ?? 0)} unit="DEG" />
-        <StatTile label="SPEED" value={String(reading?.speedKmh ?? 0)} unit="KM/H" />
+        <StatTile
+          label="G-FORCE"
+          value={gTile.kind === "value" ? gTile.value : gTile.message}
+          unit={gTile.kind === "value" ? gTile.unit : undefined}
+          caption={gTile.kind === "value" ? gTile.caption : undefined}
+          empty={gTile.kind === "empty"}
+        />
+        <StatTile
+          label="LEAN"
+          value={lTile.kind === "value" ? lTile.value : lTile.message}
+          unit={lTile.kind === "value" ? lTile.unit : undefined}
+          caption={lTile.kind === "value" ? lTile.caption : undefined}
+          empty={lTile.kind === "empty"}
+        />
       </View>
 
       <Pressable onPress={() => navigation.navigate("Guardians")}>

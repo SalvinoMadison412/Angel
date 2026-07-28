@@ -12,6 +12,17 @@ export const DEVICE_LOCAL_NAME = "CrashDetector";
 
 export type ConnectionState = "disconnected" | "scanning" | "connecting" | "connected" | "error";
 
+// Firmware configures the BMI160 to ±2g (see CrashDetector.ino's imuInit()),
+// which puts 1g at 16384 raw LSB counts — the same constant the firmware
+// uses for its own resting-baseline calibration. `impact` in the payload is
+// a raw deviation from that baseline, not a physical unit, so this is needed
+// to show it as an actual g-force delta rather than a meaningless raw count.
+export const RAW_COUNTS_PER_G = 16384;
+
+export function impactToGForce(impact: number): number {
+  return impact / RAW_COUNTS_PER_G;
+}
+
 // The wire schema is versioned (see firmware README) so a future firmware
 // field change fails loudly here instead of silently misparsing.
 const CRASH_PAYLOAD_VERSION = 1;
