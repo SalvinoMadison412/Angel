@@ -76,11 +76,11 @@ function CrashDetectorListener() {
   // finishes and is stored. Mirrors the same-purpose sync above for crash
   // events, just from a dedicated channel instead of piggybacking on one.
   useEffect(() => {
-    if (real.calibrationConfirmed === null || !device) return;
-    if (device.calibrated !== real.calibrationConfirmed) {
-      setCalibrated.mutate(real.calibrationConfirmed);
+    if (!real.calibrationConfirmation || !device) return;
+    if (device.calibrated !== real.calibrationConfirmation.calibrated) {
+      setCalibrated.mutate(real.calibrationConfirmation.calibrated);
     }
-  }, [real.calibrationConfirmed, device, setCalibrated]);
+  }, [real.calibrationConfirmation, device, setCalibrated]);
 
   return null;
 }

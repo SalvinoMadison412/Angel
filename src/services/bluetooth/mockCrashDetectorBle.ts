@@ -1,4 +1,4 @@
-import { ConnectionState, CrashEvent, DeviceFault, DEVICE_LOCAL_NAME, PairedDevice } from "./types";
+import { CalibrationConfirmation, ConnectionState, CrashEvent, DeviceFault, DEVICE_LOCAL_NAME, PairedDevice } from "./types";
 import { CrashDetectorBle, DiscoveredDevice } from "./crashDetectorBle";
 
 const MOCK_DEVICE: DiscoveredDevice = { id: "mock-crash-detector", name: DEVICE_LOCAL_NAME };
@@ -14,7 +14,7 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
   private faultListeners = new Set<(fault: DeviceFault | null) => void>();
-  private calibrationListeners = new Set<(calibrated: boolean) => void>();
+  private calibrationListeners = new Set<(confirmation: CalibrationConfirmation) => void>();
   private paired: PairedDevice | null = null;
 
   getConnectionState(): ConnectionState {
@@ -55,7 +55,13 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
     if (this.connectionState !== "connected") {
       throw new Error("Not connected to a device");
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // mirrors the ~1s the real device spends averaging samples
+    // Mirrors the real firmware's async behavior: the write itself acks
+    // quickly, and completion is reported separately via
+    // calibration_complete once the device finishes averaging samples
+    // (~1s) — not by this promise resolving.
+    setTimeout(() => {
+      this.calibrationListeners.forEach((listener) => listener({ calibrated: true, receivedAt: Date.now() }));
+    }, 1000);
   }
 
   async forgetDevice(): Promise<void> {
@@ -78,7 +84,7 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
     return () => this.faultListeners.delete(listener);
   }
 
-  subscribeCalibrationComplete(listener: (calibrated: boolean) => void): () => void {
+  subscribeCalibrationComplete(listener: (confirmation: CalibrationConfirmation) => void): () => void {
     this.calibrationListeners.add(listener);
     return () => this.calibrationListeners.delete(listener);
   }
@@ -115,7 +121,7 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
 
   /** Dev-only: injects a synthetic calibration_complete as if the real sensor sent it. */
   simulateCalibrationComplete(calibrated = true): void {
-    this.calibrationListeners.forEach((listener) => listener(calibrated));
+    this.calibrationListeners.forEach((listener) => listener({ calibrated, receivedAt: Date.now() }));
   }
 
   private setConnectionState(state: ConnectionState, errorMessage?: string) {

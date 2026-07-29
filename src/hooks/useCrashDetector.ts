@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  CalibrationConfirmation,
   ConnectionState,
   CrashEvent,
   DeviceFault,
@@ -19,7 +20,10 @@ export function useCrashDetector(options?: { mock?: boolean }) {
   const [fault, setFault] = useState<DeviceFault | null>(null);
   // Latest confirmed calibration state reported by the device, independent
   // of the calibrate() write's own ack — null until one has ever arrived.
-  const [calibrationConfirmed, setCalibrationConfirmed] = useState<boolean | null>(null);
+  // Always a fresh object per confirmation (see CalibrationConfirmation) so
+  // consumers can detect a new one even when `calibrated` repeats the same
+  // boolean, e.g. recalibrating an already-calibrated device.
+  const [calibrationConfirmation, setCalibrationConfirmation] = useState<CalibrationConfirmation | null>(null);
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([]);
   const [pairedDevice, setPairedDevice] = useState<PairedDevice | null>(null);
 
@@ -30,7 +34,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     });
     const unsubscribeEvents = service.subscribeCrashEvents(setLastEvent);
     const unsubscribeFault = service.subscribeFaultState(setFault);
-    const unsubscribeCalibration = service.subscribeCalibrationComplete(setCalibrationConfirmed);
+    const unsubscribeCalibration = service.subscribeCalibrationComplete(setCalibrationConfirmation);
     service.getPairedDevice().then(setPairedDevice);
 
     return () => {
@@ -93,7 +97,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     errorMessage,
     lastEvent,
     fault,
-    calibrationConfirmed,
+    calibrationConfirmation,
     discoveredDevices,
     pairedDevice,
     scan,

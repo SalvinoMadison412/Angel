@@ -5,6 +5,7 @@ import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
 import {
   CALIBRATE_CHARACTERISTIC_UUID,
+  CalibrationConfirmation,
   ConnectionState,
   CRASH_CHARACTERISTIC_UUID,
   CRASH_SERVICE_UUID,
@@ -73,7 +74,7 @@ export interface CrashDetectorBle {
    */
   subscribeFaultState(listener: (fault: DeviceFault | null) => void): () => void;
   /** Fires with the device's confirmed calibration state whenever it reports one — see calibration_complete. */
-  subscribeCalibrationComplete(listener: (calibrated: boolean) => void): () => void;
+  subscribeCalibrationComplete(listener: (confirmation: CalibrationConfirmation) => void): () => void;
   /** True if Android and BLE scanning is likely to return nothing because location services are off. */
   isAndroidLocationServicesDisabled(): Promise<boolean>;
 }
@@ -118,7 +119,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
   private faultListeners = new Set<(fault: DeviceFault | null) => void>();
-  private calibrationListeners = new Set<(calibrated: boolean) => void>();
+  private calibrationListeners = new Set<(confirmation: CalibrationConfirmation) => void>();
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -272,7 +273,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     return () => this.faultListeners.delete(listener);
   }
 
-  subscribeCalibrationComplete(listener: (calibrated: boolean) => void): () => void {
+  subscribeCalibrationComplete(listener: (confirmation: CalibrationConfirmation) => void): () => void {
     this.calibrationListeners.add(listener);
     return () => this.calibrationListeners.delete(listener);
   }
@@ -326,7 +327,8 @@ export class CrashDetectorBleService implements CrashDetectorBle {
         return;
       }
       case "calibration_complete": {
-        this.calibrationListeners.forEach((listener) => listener(message.calibrated));
+        const confirmation: CalibrationConfirmation = { calibrated: message.calibrated, receivedAt: Date.now() };
+        this.calibrationListeners.forEach((listener) => listener(confirmation));
         return;
       }
     }

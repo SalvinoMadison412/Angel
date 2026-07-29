@@ -99,6 +99,18 @@ export interface DeviceFault {
   receivedAt: number;
 }
 
+export interface CalibrationConfirmation {
+  calibrated: boolean;
+  /**
+   * app-side receipt time — the firmware doesn't carry a clock. Distinct
+   * confirmations always produce a new object even when `calibrated` is
+   * the same boolean as last time (e.g. recalibrating an already-calibrated
+   * device), so callers can tell "a fresh confirmation arrived" apart from
+   * "the value happens to be unchanged" — a plain boolean can't.
+   */
+  receivedAt: number;
+}
+
 export interface PairedDevice {
   id: string;
   name: string;

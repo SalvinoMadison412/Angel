@@ -1,5 +1,5 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, BackHandler, StyleSheet, Text } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
 import { useCrashDetector, useDevice } from "../../hooks";
@@ -8,6 +8,11 @@ import { RootStackNavigation, RootStackParamList } from "../../navigation/types"
 
 type Status = "idle" | "calibrating" | "success" | "error";
 
+// How long to wait for the calibration_complete notification after a
+// successful calibrate() write before giving up — BLE notifications can
+// occasionally be missed, so this must not wait forever.
+const CONFIRMATION_TIMEOUT_MS = 5000;
+
 /**
  * Reused for both first-time setup (pushed by DeviceSetupScreen right
  * after a successful pair, with `mandatory: true`) and later recalibration
@@ -15,21 +20,32 @@ type Status = "idle" | "calibrating" | "success" | "error";
  * plus whether it can be skipped, driven by whether the device's stored
  * `calibrated` flag is already true.
  *
+ * Calibration is asynchronous on the firmware side: the calibrate() write
+ * just acks receipt, and the device reports whether it actually finished
+ * and stored a reference separately, via a calibration_complete
+ * notification — see services/bluetooth/types.ts. So "success" here is
+ * driven by that notification arriving, not by the write resolving.
+ *
  * `mandatory` blocks the skip button and back navigation so uncalibrated
  * tilt data can't slip through unnoticed — but only while nothing has gone
- * wrong yet. Once a calibration attempt actually fails, the escape hatches
- * come back so a genuinely broken sensor doesn't trap the rider on this
- * screen with no way out.
+ * wrong yet. Once a calibration attempt actually fails (including timing
+ * out waiting for confirmation), the escape hatches come back so a
+ * genuinely broken sensor doesn't trap the rider on this screen with no
+ * way out.
  */
 export function CalibrateSensorScreen() {
   const navigation = useNavigation<RootStackNavigation>();
   const route = useRoute<RouteProp<RootStackParamList, "CalibrateSensor">>();
   const mandatory = route.params?.mandatory ?? false;
-  const { connectionState, calibrate } = useCrashDetector();
+  const { connectionState, calibrate, calibrationConfirmation } = useCrashDetector();
   const { data: device, ensureDevice, setCalibrated } = useDevice();
 
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Marks when the current attempt started waiting for a confirmation, so a
+  // confirmation left over from an earlier attempt (or from before this
+  // screen even mounted) isn't mistaken for this one's result.
+  const waitStartedAtRef = useRef<number | null>(null);
 
   const isRecalibration = Boolean(device?.calibrated);
   const connected = connectionState === "connected";
@@ -41,16 +57,56 @@ export function CalibrateSensorScreen() {
     return () => subscription.remove();
   }, [canLeave]);
 
+  // The authoritative "did it actually work" signal — fires when a fresh
+  // calibration_complete notification arrives while we're waiting on one.
+  useEffect(() => {
+    if (status !== "calibrating" || !calibrationConfirmation) return;
+    if (waitStartedAtRef.current === null || calibrationConfirmation.receivedAt < waitStartedAtRef.current) return;
+
+    if (calibrationConfirmation.calibrated) {
+      if (!device || !device.calibrated) {
+        setCalibrated.mutate(true);
+      }
+      setStatus("success");
+    } else {
+      // The device itself is telling us the average didn't take (e.g. it
+      // moved mid-sample) — a real failure, not a dropped notification.
+      setStatus("error");
+      setErrorMessage("The sensor reported calibration didn't take — keep the bike completely still and try again.");
+    }
+  }, [calibrationConfirmation, status, device, setCalibrated]);
+
+  // Don't wait forever for a notification that might never arrive.
+  useEffect(() => {
+    if (status !== "calibrating") return;
+    const timer = setTimeout(() => {
+      setStatus("error");
+      setErrorMessage(
+        "No confirmation came back from the sensor — the signal may have been missed. Check it's still nearby and try again."
+      );
+    }, CONFIRMATION_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  // No point waiting out the full timeout if the link itself already died.
+  useEffect(() => {
+    if (status !== "calibrating" || connected) return;
+    setStatus("error");
+    setErrorMessage("Connection to the sensor was lost before calibration finished. Reconnect and try again.");
+  }, [status, connected]);
+
   const handleCalibrate = async () => {
     setStatus("calibrating");
     setErrorMessage(null);
+    waitStartedAtRef.current = Date.now();
     try {
       await calibrate();
       if (!device) {
         await ensureDevice.mutateAsync();
       }
-      await setCalibrated.mutateAsync(true);
-      setStatus("success");
+      // Deliberately no setStatus("success") here — the write ack only
+      // means the device received the command, not that calibration
+      // finished. The effects above resolve this from here.
     } catch (err) {
       setStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "Calibration failed — check the sensor is connected.");
@@ -116,6 +172,7 @@ export function CalibrateSensorScreen() {
       {status === "success" && (
         <>
           <GlassCard style={styles.centeredCard}>
+            <Text style={styles.checkmark}>✓</Text>
             <Text style={[type.title, styles.successText]}>Calibration complete</Text>
             <Text style={[type.bodySmall, styles.dim, styles.centeredText]}>
               The sensor now reports tilt relative to this mounting position.
@@ -149,6 +206,7 @@ const styles = StyleSheet.create({
   centeredCard: { alignItems: "center", paddingVertical: spacing.xxl },
   centeredText: { textAlign: "center", marginTop: spacing.sm },
   holdStill: { color: colors.text, marginTop: spacing.lg },
-  successText: { color: colors.success },
+  checkmark: { color: colors.success, fontSize: 40, fontFamily: type.display.fontFamily },
+  successText: { color: colors.success, marginTop: spacing.md },
   errorLabel: { color: colors.danger },
 });
