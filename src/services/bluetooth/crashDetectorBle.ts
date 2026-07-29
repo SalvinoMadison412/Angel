@@ -1,5 +1,5 @@
 import { PermissionsAndroid, Platform } from "react-native";
-import { BleError, BleManager, Characteristic, Device, State as BleState } from "react-native-ble-plx";
+import { BleError, BleManager, Characteristic, Device, Subscription, State as BleState } from "react-native-ble-plx";
 import * as base64 from "base-64";
 import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
@@ -116,6 +116,13 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   private manager = new BleManager();
   private connectionState: ConnectionState = "disconnected";
   private connectedDevice: Device | null = null;
+  // Torn down and re-created on every successful connect() — without this,
+  // a redundant connect() call (e.g. a newly-mounted screen's mount effect
+  // calling reconnectToPairedDevice() while already connected) stacks a
+  // second live disconnect listener on top of the first, so one real drop
+  // fires two independent reconnect schedules instead of one.
+  private notifySubscription: Subscription | null = null;
+  private disconnectSubscription: Subscription | null = null;
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
   private faultListeners = new Set<(fault: DeviceFault | null) => void>();
@@ -144,6 +151,19 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     if (!paired) return;
     this.forgotten = false;
     await this.connect(paired.id, paired.name);
+  }
+
+  /**
+   * Every screen that mounts the real useCrashDetector() hook calls this
+   * unconditionally on mount (so a fresh app launch reconnects on its own).
+   * That means it fires again on top of an already-live connection every
+   * time e.g. CalibrateSensorScreen is navigated to — connect() below must
+   * treat that as a no-op rather than re-issuing connectToDevice() on an
+   * already-connected peripheral, which is what was producing a genuine
+   * connect/disconnect storm (see notifySubscription/disconnectSubscription).
+   */
+  private isAlreadyConnectedTo(deviceId: string): boolean {
+    return this.connectionState === "connected" && this.connectedDevice?.id === deviceId;
   }
 
   startScan(onDeviceFound: (device: DiscoveredDevice) => void): () => void {
@@ -197,6 +217,14 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   }
 
   async connect(deviceId: string, deviceName: string): Promise<void> {
+    // Idempotency guard — a redundant call while already connected to this
+    // exact device (see isAlreadyConnectedTo) must be a true no-op. Without
+    // this, re-issuing connectToDevice() on an already-connected peripheral
+    // forces a real "connecting" transition and, on Android, can make the
+    // native BLE stack tear down and re-negotiate the GATT link — a genuine
+    // disconnect, not just a UI-level one.
+    if (this.isAlreadyConnectedTo(deviceId)) return;
+
     this.stopScan();
     this.clearReconnectTimer();
     this.forgotten = false;
@@ -208,11 +236,22 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       this.connectedDevice = device;
       this.reconnectAttempt = 0;
 
-      device.monitorCharacteristicForService(CRASH_SERVICE_UUID, CRASH_CHARACTERISTIC_UUID, (error, characteristic) =>
-        this.handleNotification(error, characteristic)
+      // Tear down any subscriptions from a previous connection before
+      // registering fresh ones — otherwise a reconnect (redundant or real)
+      // leaves the old listeners live, and one disconnect fires reconnect
+      // logic twice, each duplicating listeners further.
+      this.notifySubscription?.remove();
+      this.disconnectSubscription?.remove();
+
+      this.notifySubscription = device.monitorCharacteristicForService(
+        CRASH_SERVICE_UUID,
+        CRASH_CHARACTERISTIC_UUID,
+        (error, characteristic) => this.handleNotification(error, characteristic)
       );
 
-      this.manager.onDeviceDisconnected(device.id, () => this.handleUnexpectedDisconnect(deviceId, deviceName));
+      this.disconnectSubscription = this.manager.onDeviceDisconnected(device.id, () =>
+        this.handleUnexpectedDisconnect(deviceId, deviceName)
+      );
 
       await SecureStore.setItemAsync(PAIRED_DEVICE_KEY, JSON.stringify({ id: deviceId, name: deviceName }));
       this.setConnectionState("connected");
@@ -226,6 +265,10 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   async disconnect(): Promise<void> {
     this.clearReconnectTimer();
     this.stopScan();
+    this.notifySubscription?.remove();
+    this.notifySubscription = null;
+    this.disconnectSubscription?.remove();
+    this.disconnectSubscription = null;
     const device = this.connectedDevice;
     this.connectedDevice = null;
     if (device) {
