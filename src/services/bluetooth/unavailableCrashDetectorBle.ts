@@ -1,4 +1,4 @@
-import { CalibrationConfirmation, ConnectionState, CrashEvent, DeviceFault, PairedDevice } from "./types";
+import { CalibrationConfirmation, ConnectionState, CrashEvent, DeviceFault, PairedDevice, TelemetryReading } from "./types";
 import { CrashDetectorBle, DiscoveredDevice } from "./crashDetectorBle";
 
 const MESSAGE =
@@ -44,6 +44,10 @@ export class UnavailableCrashDetectorBleService implements CrashDetectorBle {
 
   subscribeConnectionState(listener: (state: ConnectionState, errorMessage?: string) => void): () => void {
     listener("error", MESSAGE);
+    return () => {};
+  }
+
+  subscribeTelemetry(_listener: (reading: TelemetryReading) => void): () => void {
     return () => {};
   }
 

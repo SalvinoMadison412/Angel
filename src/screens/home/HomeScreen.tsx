@@ -29,7 +29,7 @@ export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: guardians } = useGuardians();
   const { data: subscription } = useCurrentSubscription();
-  const { isLinked, isReconnecting, lastEvent } = useCrashDetector();
+  const { isLinked, isReconnecting, telemetry, lastEvent } = useCrashDetector();
   const { simulateCrash, simulateFault, clearSimulatedFault } = useCrashDetector({ mock: true });
 
   // Driven by the live BLE connection state, not the device row's persisted
@@ -84,20 +84,8 @@ export function HomeScreen() {
       </GlassCard>
 
       <GlassCard style={styles.readingCard}>
-        <Text style={[type.kicker, styles.dimText]}>LAST READING</Text>
-        {!lastEvent ? (
-          isLinked ? (
-            <>
-              <Text style={styles.emptyReading}>Waiting for an event</Text>
-              <Text style={styles.emptyReadingHint}>
-                No incidents recorded yet — this updates automatically the moment the sensor detects a hard impact
-                or a tip-over.
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.emptyReading}>No device connected</Text>
-          )
-        ) : (
+        <Text style={[type.kicker, styles.dimText]}>LIVE READING</Text>
+        {lastEvent ? (
           <>
             <View style={styles.readingSeverityRow}>
               <Text style={[styles.severityNumber, { color: severityColor(lastEvent.severity) }]}>
@@ -121,27 +109,42 @@ export function HomeScreen() {
             <Text style={styles.readingCopy}>
               {triggerDescription(lastEvent.trigger)} An estimate based on sensor readings, not a medical diagnosis.
             </Text>
-
-            <View style={styles.metricsRow}>
-              <StatTile label="IMPACT" value={lastEvent.impactG.toFixed(2)} unit="G" caption="Force of the hit" />
-              <StatTile
-                label="ROTATION"
-                value={lastEvent.gyroDps.toFixed(0)}
-                unit="°/S"
-                caption="Spin/tumble speed"
-              />
-              <StatTile
-                label="LEAN"
-                value={lastEvent.calibrated ? String(Math.round(lastEvent.tilt)) : "Not calibrated"}
-                unit={lastEvent.calibrated ? "°" : undefined}
-                caption={lastEvent.calibrated ? "Off resting angle" : undefined}
-                empty={!lastEvent.calibrated}
-              />
-            </View>
-
-            <Text style={styles.timestamp}>{formatReadingTime(lastEvent.receivedAt)}</Text>
           </>
+        ) : isLinked ? (
+          <Text style={styles.emptyReading}>No incidents recorded yet</Text>
+        ) : (
+          <Text style={styles.emptyReading}>No device connected</Text>
         )}
+
+        <View style={styles.metricsRow}>
+          <StatTile
+            label="IMPACT"
+            value={isLinked && telemetry ? telemetry.impactG.toFixed(2) : "--"}
+            unit={isLinked && telemetry ? "G" : undefined}
+            caption="impact force"
+          />
+          <StatTile
+            label="ROTATION"
+            value={isLinked && telemetry ? telemetry.gyroDps.toFixed(0) : "--"}
+            unit={isLinked && telemetry ? "°/S" : undefined}
+            caption="spin speed"
+          />
+          <StatTile
+            label="LEAN"
+            value={
+              !isLinked || !telemetry
+                ? "--"
+                : telemetry.calibrated
+                  ? String(Math.round(telemetry.tilt))
+                  : "Not calibrated"
+            }
+            unit={isLinked && telemetry?.calibrated ? "°" : undefined}
+            caption={isLinked && telemetry && !telemetry.calibrated ? undefined : "lean angle"}
+            empty={isLinked && !!telemetry && !telemetry.calibrated}
+          />
+        </View>
+
+        <Text style={styles.timestamp}>{isLinked && telemetry ? formatReadingTime(telemetry.receivedAt) : "--"}</Text>
       </GlassCard>
 
       <Pressable onPress={() => navigation.navigate("Guardians")}>
@@ -244,7 +247,6 @@ const styles = StyleSheet.create({
   motifWrap: { alignItems: "center", paddingVertical: spacing.xl },
   readingCard: {},
   emptyReading: { color: colors.textDim, marginTop: spacing.md },
-  emptyReadingHint: { color: colors.textDim, marginTop: spacing.sm, ...type.bodySmall },
   readingSeverityRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md },
   severityNumber: { fontFamily: type.display.fontFamily, fontSize: 36 },
   severityTextCol: { flex: 1 },

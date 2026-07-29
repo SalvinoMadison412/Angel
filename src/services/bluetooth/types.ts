@@ -16,6 +16,18 @@ export type ConnectionState = "disconnected" | "scanning" | "connecting" | "conn
 // gyro_dps directly — no raw-count conversion needed on the app side.
 const severityLiteral = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
 
+// Sent once per firmware loop iteration — the continuous stream that drives
+// the app's live IMPACT/ROTATION/LEAN cards. No `trigger`/`severity`: those
+// only mean something for a detected "crash" event below.
+export const telemetryMessageSchema = z.object({
+  type: z.literal("telemetry"),
+  impact_g: z.number(),
+  gyro_dps: z.number(),
+  tilt: z.number(),
+  still: z.boolean(),
+  calibrated: z.boolean(),
+});
+
 // Every notification carries a `type` discriminator, checked before
 // anything else about the message is trusted — a "fault" and a "crash"
 // payload have no fields in common and must never share a code path.
@@ -55,6 +67,7 @@ export const calibrationCompleteMessageSchema = z.object({
 });
 
 export const crashDetectorMessageSchema = z.discriminatedUnion("type", [
+  telemetryMessageSchema,
   crashMessageSchema,
   faultMessageSchema,
   faultClearedMessageSchema,
@@ -84,6 +97,33 @@ export function crashEventFromMessage(message: CrashMessage): CrashEvent {
   return {
     severity: message.severity,
     trigger: message.trigger,
+    impactG: message.impact_g,
+    gyroDps: message.gyro_dps,
+    tilt: message.tilt,
+    still: message.still,
+    calibrated: message.calibrated,
+    receivedAt: Date.now(),
+  };
+}
+
+export type TelemetryMessage = z.infer<typeof telemetryMessageSchema>;
+
+/** A single continuous-stream reading — see `type: "telemetry"` in firmware/README.md. */
+export interface TelemetryReading {
+  /** Instantaneous force magnitude, in g's. */
+  impactG: number;
+  /** Instantaneous gyro magnitude, in degrees/second. */
+  gyroDps: number;
+  /** Degrees of deviation from the calibrated mounting position — only meaningful when `calibrated` is true. */
+  tilt: number;
+  still: boolean;
+  calibrated: boolean;
+  /** app-side receipt time — the firmware doesn't carry a clock */
+  receivedAt: number;
+}
+
+export function telemetryReadingFromMessage(message: TelemetryMessage): TelemetryReading {
+  return {
     impactG: message.impact_g,
     gyroDps: message.gyro_dps,
     tilt: message.tilt,

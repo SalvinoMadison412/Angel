@@ -1,11 +1,11 @@
 // Angel CrashDetector — Arduino Nano ESP32 firmware
 //
 // Reads a BMI160 accelerometer/gyroscope over I2C via the DFRobot_BMI160
-// library, watches for a crash signal, and pushes a single BLE notification
-// per event — either a "crash" (impact- or tilt-triggered), a "fault" (the
-// IMU stopped responding), or a "fault_cleared". This is NOT a continuous
-// telemetry stream: BLE central apps should expect long silent stretches
-// punctuated by rare notifications.
+// library and pushes BLE notifications: a "telemetry" reading every loop
+// iteration (the live impact/gyro/tilt stream the app's Home screen plots),
+// plus one-off "crash" (impact- or tilt-triggered), "fault" (the IMU
+// stopped responding), and "fault_cleared" notifications layered on top of
+// that same stream.
 //
 // BLE contract
 // ------------
@@ -19,9 +19,9 @@
 // you regenerate these, update the app's src/services/bluetooth/types.ts to
 // match — the two must stay in sync.
 //
-// Every notification carries a `type` field ("crash" / "fault" /
-// "fault_cleared") that the app branches on before touching anything else —
-// see firmware/README.md for the full payload shapes.
+// Every notification carries a `type` field ("telemetry" / "crash" /
+// "fault" / "fault_cleared") that the app branches on before touching
+// anything else — see firmware/README.md for the full payload shapes.
 #include <DFRobot_BMI160.h>
 #include <Wire.h>
 #include <ArduinoBLE.h>
@@ -131,6 +131,22 @@ void sendReport(const char* type, const char* trigger, int severity,
   crashChar.writeValue(json);
 }
 
+// Sent once per loop iteration — the live stream the app's Home screen
+// cards render continuously. No `trigger`/`severity`: those only mean
+// something for a detected "crash" event, not an arbitrary instantaneous
+// reading.
+void sendTelemetry(float impactG, float gyroDps, float tilt, bool isStill) {
+  String json = "{";
+  json += "\"type\":\"telemetry\",";
+  json += "\"impact_g\":" + String(impactG, 3) + ",";
+  json += "\"gyro_dps\":" + String(gyroDps, 1) + ",";
+  json += "\"tilt\":" + String(tilt, 1) + ",";
+  json += "\"still\":" + String(isStill ? "true" : "false") + ",";
+  json += "\"calibrated\":" + String(calibrated ? "true" : "false");
+  json += "}";
+  crashChar.writeValue(json);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -216,6 +232,8 @@ void loop() {
   } else {
     stillSince = 0;
   }
+
+  sendTelemetry(impactG, gyroDps, tilt, isStill);
 
   // Path 1: impact-triggered (existing behavior)
   if (impactG > IMPACT_LOW_G && !wasImpact) {

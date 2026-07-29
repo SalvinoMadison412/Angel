@@ -7,6 +7,7 @@ import {
   DiscoveredDevice,
   MockCrashDetectorBleService,
   PairedDevice,
+  TelemetryReading,
   getCrashDetectorBle,
 } from "../services/bluetooth";
 
@@ -37,6 +38,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
   const lastCommittedStateRef = useRef<ConnectionState>(service.getConnectionState());
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const [telemetry, setTelemetry] = useState<TelemetryReading | null>(null);
   const [lastEvent, setLastEvent] = useState<CrashEvent | null>(null);
   const [fault, setFault] = useState<DeviceFault | null>(null);
   // Latest confirmed calibration state reported by the device, independent
@@ -92,6 +94,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
       setLinkStatus(state);
       if (!mock) bleStateLog(`linkStatus -> ${state} (no debounce — wasn't connected before this)`);
     });
+    const unsubscribeTelemetry = service.subscribeTelemetry(setTelemetry);
     const unsubscribeEvents = service.subscribeCrashEvents(setLastEvent);
     const unsubscribeFault = service.subscribeFaultState(setFault);
     const unsubscribeCalibration = service.subscribeCalibrationComplete(setCalibrationConfirmation);
@@ -99,6 +102,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
 
     return () => {
       unsubscribeState();
+      unsubscribeTelemetry();
       unsubscribeEvents();
       unsubscribeFault();
       unsubscribeCalibration();
@@ -162,6 +166,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     isLinked: linkStatus === "connected" || linkStatus === "reconnecting",
     isReconnecting: linkStatus === "reconnecting",
     errorMessage,
+    telemetry,
     lastEvent,
     fault,
     calibrationConfirmation,

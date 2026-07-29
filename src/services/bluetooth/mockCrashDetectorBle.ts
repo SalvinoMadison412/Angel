@@ -1,4 +1,12 @@
-import { CalibrationConfirmation, ConnectionState, CrashEvent, DeviceFault, DEVICE_LOCAL_NAME, PairedDevice } from "./types";
+import {
+  CalibrationConfirmation,
+  ConnectionState,
+  CrashEvent,
+  DeviceFault,
+  DEVICE_LOCAL_NAME,
+  PairedDevice,
+  TelemetryReading,
+} from "./types";
 import { CrashDetectorBle, DiscoveredDevice } from "./crashDetectorBle";
 
 const MOCK_DEVICE: DiscoveredDevice = { id: "mock-crash-detector", name: DEVICE_LOCAL_NAME };
@@ -12,6 +20,7 @@ const MOCK_DEVICE: DiscoveredDevice = { id: "mock-crash-detector", name: DEVICE_
 export class MockCrashDetectorBleService implements CrashDetectorBle {
   private connectionState: ConnectionState = "disconnected";
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
+  private telemetryListeners = new Set<(reading: TelemetryReading) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
   private faultListeners = new Set<(fault: DeviceFault | null) => void>();
   private calibrationListeners = new Set<(confirmation: CalibrationConfirmation) => void>();
@@ -72,6 +81,11 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
   subscribeConnectionState(listener: (state: ConnectionState, errorMessage?: string) => void): () => void {
     this.stateListeners.add(listener);
     return () => this.stateListeners.delete(listener);
+  }
+
+  subscribeTelemetry(listener: (reading: TelemetryReading) => void): () => void {
+    this.telemetryListeners.add(listener);
+    return () => this.telemetryListeners.delete(listener);
   }
 
   subscribeCrashEvents(listener: (event: CrashEvent) => void): () => void {

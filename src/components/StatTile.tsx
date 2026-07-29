@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { colors, spacing, type } from "../theme";
 import { GlassCard } from "./GlassCard";
 
@@ -13,20 +13,48 @@ interface Props {
   empty?: boolean;
 }
 
+const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
+
 export function StatTile({ label, value, unit, caption, empty }: Props) {
+  // Scaled off the current window (not a fixed pixel value) so the tile
+  // stays proportional — and the value never overflows — across phone
+  // sizes, from small Android screens up to flagship-size ones.
+  const { width, height } = useWindowDimensions();
+  const cardHeight = clamp(height * 0.15, 92, 132);
+  const valueFontSize = clamp(width * 0.077, 22, 34);
+
   return (
-    <GlassCard style={styles.card} padded={false}>
+    <GlassCard style={[styles.card, { height: cardHeight }]} padded={false}>
       <View style={styles.inner}>
-        <Text style={[type.kicker, styles.label]}>{label}</Text>
+        <Text style={[type.kicker, styles.label]} numberOfLines={1}>
+          {label}
+        </Text>
         {empty ? (
-          <Text style={[type.bodySmall, styles.emptyValue]}>{value}</Text>
+          <Text style={[type.bodySmall, styles.emptyValue]} numberOfLines={1} adjustsFontSizeToFit>
+            {value}
+          </Text>
         ) : (
           <>
-            <Text style={[type.statValue, styles.value]}>{value}</Text>
-            {unit ? <Text style={[type.label, styles.unit]}>{unit}</Text> : null}
+            <Text
+              style={[type.statValue, styles.value, { fontSize: valueFontSize }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {value}
+            </Text>
+            {unit ? (
+              <Text style={[type.label, styles.unit]} numberOfLines={1}>
+                {unit}
+              </Text>
+            ) : null}
           </>
         )}
-        {caption ? <Text style={[type.label, styles.caption]}>{caption}</Text> : null}
+        {caption ? (
+          <Text style={[type.label, styles.caption]} numberOfLines={1}>
+            {caption}
+          </Text>
+        ) : null}
       </View>
     </GlassCard>
   );

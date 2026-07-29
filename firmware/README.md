@@ -59,9 +59,31 @@ fields and must never be handled by the same code path. There is no `v`
 (schema version) field on this revision; `type` is what the app checks
 first, and an unrecognized shape is dropped rather than guessed at.
 
+#### `type: "telemetry"`
+
+Sent once per loop iteration — this **is** the continuous stream, and it's
+what drives the live IMPACT/ROTATION/LEAN cards on the app's Home screen:
+
+```json
+{
+  "type": "telemetry",
+  "impact_g": 0.98,
+  "gyro_dps": 12.4,
+  "tilt": 2.1,
+  "still": true,
+  "calibrated": true
+}
+```
+
+Same field meanings as the matching fields on `crash` below, just sampled
+continuously instead of only at the moment of a detected event. No
+`trigger`/`severity` — those only mean something for a `crash`.
+
 #### `type: "crash"`
 
-One notification per detected event — **not** a continuous stream:
+One notification per detected event, layered on top of the `telemetry`
+stream above — the app treats this as a separate, rarer signal that carries
+extra fields (`trigger`, `severity`) the continuous stream doesn't:
 
 ```json
 {

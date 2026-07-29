@@ -13,8 +13,10 @@ import {
   DeviceFault,
   DEVICE_LOCAL_NAME,
   PairedDevice,
+  TelemetryReading,
   crashDetectorMessageSchema,
   crashEventFromMessage,
+  telemetryReadingFromMessage,
 } from "./types";
 
 const PAIRED_DEVICE_KEY = "crashDetectorPairedDevice";
@@ -70,6 +72,8 @@ export interface CrashDetectorBle {
    */
   calibrate(): Promise<void>;
   subscribeConnectionState(listener: (state: ConnectionState, errorMessage?: string) => void): () => void;
+  /** Fires with every continuous-stream reading — see `type: "telemetry"` in firmware/README.md. */
+  subscribeTelemetry(listener: (reading: TelemetryReading) => void): () => void;
   subscribeCrashEvents(listener: (event: CrashEvent) => void): () => void;
   /**
    * Fires with a `DeviceFault` when the device reports a health problem
@@ -137,6 +141,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   private notifySubscription: Subscription | null = null;
   private disconnectSubscription: Subscription | null = null;
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
+  private telemetryListeners = new Set<(reading: TelemetryReading) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
   private faultListeners = new Set<(fault: DeviceFault | null) => void>();
   private calibrationListeners = new Set<(confirmation: CalibrationConfirmation) => void>();
@@ -429,6 +434,11 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     return () => this.stateListeners.delete(listener);
   }
 
+  subscribeTelemetry(listener: (reading: TelemetryReading) => void): () => void {
+    this.telemetryListeners.add(listener);
+    return () => this.telemetryListeners.delete(listener);
+  }
+
   subscribeCrashEvents(listener: (event: CrashEvent) => void): () => void {
     this.eventListeners.add(listener);
     return () => this.eventListeners.delete(listener);
@@ -480,8 +490,16 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     // and a crash share no fields and must never be handled by the same
     // downstream path (a fault is a device-health problem, not an emergency).
     const message = result.data;
-    bleOpLog(`NOTIFY received type=${message.type}`);
+    // Skip the per-packet diagnostic log for telemetry — it fires at the
+    // firmware's loop rate and would drown out the rare connect/disconnect
+    // events this temp logging exists to trace (see bleOpLog's own comment).
+    if (message.type !== "telemetry") bleOpLog(`NOTIFY received type=${message.type}`);
     switch (message.type) {
+      case "telemetry": {
+        const reading = telemetryReadingFromMessage(message);
+        this.telemetryListeners.forEach((listener) => listener(reading));
+        return;
+      }
       case "crash": {
         const event = crashEventFromMessage(message);
         this.eventListeners.forEach((listener) => listener(event));
