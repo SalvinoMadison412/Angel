@@ -21,7 +21,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "BLUETOOTH_SCAN",
-        "BLUETOOTH_CONNECT"
+        "BLUETOOTH_CONNECT",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -42,6 +43,7 @@
       ],
       "expo-secure-store",
       "expo-font",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {

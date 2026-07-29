@@ -1,7 +1,8 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { NavigationContainer, DarkTheme, useNavigation } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import React, { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, StyleSheet } from "react-native";
+import { AccessibilityInfo, AppState, Animated, StyleSheet } from "react-native";
 import { AppTabs } from "./AppTabs";
 import { AuthNavigator } from "./AuthNavigator";
 import { AnimatedSplash } from "../components";
@@ -21,6 +22,7 @@ import { useDevice } from "../hooks/useDevice";
 import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
 import { DEFAULT_COUNTDOWN_SECONDS, shouldTriggerAlert } from "../services/emergency";
+import { crashEventFromNotificationResponse, presentCrashNotification } from "../services/notifications";
 import { colors } from "../theme";
 
 // The animation's own on-screen time — kept in sync with AnimatedSplash's
@@ -40,6 +42,16 @@ const navTheme = {
   colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, border: colors.divider },
 };
 
+// Same destination decision from two different places below — the live BLE
+// listener and a tapped/cold-started notification — so they can't drift.
+function navigateToCrashAlert(navigation: RootStackNavigation, event: CrashEvent) {
+  if (shouldTriggerAlert(event)) {
+    navigation.navigate("CrashAlert", { ...event, totalSeconds: DEFAULT_COUNTDOWN_SECONDS });
+  } else {
+    navigation.navigate("EmergencyCountdown", event);
+  }
+}
+
 // Listens for crash events from both the real sensor and the mock stream
 // (the Home screen's dev "simulate crash" panel feeds the mock one) and
 // routes every event to a fullscreen alert — severity >= 2 goes to the full
@@ -47,6 +59,15 @@ const navTheme = {
 // countdown (see shouldTriggerAlert). Each destination screen logs its own
 // outcome locally for the calibration work described in
 // firmware/README.md, same as before.
+//
+// Also fires a high-priority local notification whenever a crash arrives
+// while the app isn't foregrounded (see presentCrashNotification) — the
+// navigate() calls above still queue up the alert screen for whenever the
+// app is next opened, but with nothing visibly onscreen while backgrounded,
+// the notification (and its own channel-level vibration) is what actually
+// gets the rider's attention. No foreground service backs this: if Android
+// has already suspended/killed the process before the packet arrives,
+// nothing fires until the app is manually reopened.
 function CrashDetectorListener() {
   const navigation = useNavigation<RootStackNavigation>();
   const real = useCrashDetector({ mock: false });
@@ -69,10 +90,11 @@ function CrashDetectorListener() {
       setCalibrated.mutate(event.calibrated);
     }
 
-    if (shouldTriggerAlert(event)) {
-      navigation.navigate("CrashAlert", { ...event, totalSeconds: DEFAULT_COUNTDOWN_SECONDS });
-    } else {
-      navigation.navigate("EmergencyCountdown", event);
+    navigateToCrashAlert(navigation, event);
+    if (AppState.currentState !== "active") {
+      presentCrashNotification(event).catch((err) =>
+        console.warn("[notifications] failed to present crash notification", err)
+      );
     }
   }, [real.lastEvent, mock.lastEvent, navigation, device, setCalibrated]);
 
@@ -86,6 +108,30 @@ function CrashDetectorListener() {
       setCalibrated.mutate(real.calibrationConfirmation.calibrated);
     }
   }, [real.calibrationConfirmation, device, setCalibrated]);
+
+  // Tapping the crash notification (or cold-starting the app from one) must
+  // land on the same alert screen a live event would have — reusing the
+  // exact severity routing above so the two paths can't disagree.
+  useEffect(() => {
+    // getLastNotificationResponseAsync() (cold start) and the live listener
+    // below both resolve asynchronously and can both fire for the exact
+    // same tap — order between them isn't guaranteed. Dedupe by the
+    // notification's own request identifier, whichever callback sees it
+    // first, rather than assuming one always resolves before the other.
+    const handledIds = new Set<string>();
+    const handleResponse = (response: Notifications.NotificationResponse | null) => {
+      const id = response?.notification.request.identifier;
+      if (!id || handledIds.has(id)) return;
+      handledIds.add(id);
+      const event = crashEventFromNotificationResponse(response);
+      if (event) navigateToCrashAlert(navigation, event);
+    };
+
+    Notifications.getLastNotificationResponseAsync().then(handleResponse);
+    const subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
+
+    return () => subscription.remove();
+  }, [navigation]);
 
   return null;
 }

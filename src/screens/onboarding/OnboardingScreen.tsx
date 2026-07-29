@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
 import { useDevice, useEmergencyProfile, useGuardians, useProfile } from "../../hooks";
+import { requestCrashNotificationPermission } from "../../services/notifications";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
 
@@ -55,6 +56,14 @@ export function OnboardingScreen() {
         await Location.requestForegroundPermissionsAsync();
       } catch (err) {
         console.warn("[onboarding] failed to request location permission", err);
+      }
+      // Same reasoning as location above — a crash notification while
+      // backgrounded is useless if POST_NOTIFICATIONS was never granted,
+      // and mid-emergency is the wrong time to ask for the first time.
+      try {
+        await requestCrashNotificationPermission();
+      } catch (err) {
+        console.warn("[onboarding] failed to request notification permission", err);
       }
       await profile.completeOnboarding.mutateAsync();
       return;

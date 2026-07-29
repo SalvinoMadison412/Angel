@@ -23,3 +23,17 @@ export function triggerDescription(trigger: CrashTrigger): string {
     ? "Detected: hard impact."
     : "Detected: bike may have tipped over or the sensor was dislodged.";
 }
+
+/**
+ * How many seconds should be left on a crash-alert countdown *right now*,
+ * given when the crash was actually detected — not always `totalSeconds`.
+ * Opening the alert screen from a tapped notification can happen well after
+ * `receivedAt` (the app was backgrounded when the crash was detected), and
+ * the countdown must reflect that gap rather than restart from full every
+ * time the screen mounts — otherwise a rider who doesn't respond gets more
+ * time than intended, and guardians get alerted later than they should.
+ */
+export function remainingCountdownSeconds(receivedAt: number, totalSeconds: number): number {
+  const elapsedSeconds = Math.floor((Date.now() - receivedAt) / 1000);
+  return Math.max(0, totalSeconds - elapsedSeconds);
+}

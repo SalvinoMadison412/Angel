@@ -23,6 +23,16 @@ const PAIRED_DEVICE_KEY = "crashDetectorPairedDevice";
 const SCAN_TIMEOUT_MS = 15000;
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const CALIBRATE_TIMEOUT_MS = 5000;
+// Minimum time between the notify subscription being requested and any
+// write being allowed to go out. react-native-ble-plx doesn't expose a
+// promise for "the CCCD enable actually completed" — monitorCharacteristicForService()
+// registers the JS callback and returns immediately, while the underlying
+// descriptor write happens asynchronously in the native BLE stack. Without
+// this, a write issued too soon after connecting risks overlapping that
+// still-in-flight enable — a known Android BLE race (issuing a second GATT
+// operation before a prior one truly finished at the radio level, not just
+// in JS).
+const NOTIFY_SETTLE_MS = 500;
 // Android defaults to a 23-byte ATT MTU (20 usable bytes) unless the
 // central explicitly negotiates a larger one — nowhere near enough for our
 // JSON payloads (calibration_complete alone is 49 characters). Requested at
@@ -143,6 +153,11 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   // second live disconnect listener on top of the first, so one real drop
   // fires two independent reconnect schedules instead of one.
   private notifySubscription: Subscription | null = null;
+  // True once NOTIFY_SETTLE_MS has elapsed since the current connection's
+  // notify subscription was set up — see performConnect(). Reset on every
+  // disconnect so a reconnect can't inherit a stale "settled" state from a
+  // previous connection.
+  private notifySettled = false;
   private disconnectSubscription: Subscription | null = null;
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private telemetryListeners = new Set<(reading: TelemetryReading) => void>();
@@ -361,7 +376,17 @@ export class CrashDetectorBleService implements CrashDetectorBle {
         CRASH_CHARACTERISTIC_UUID,
         (error, characteristic) => this.handleNotification(error, characteristic)
       );
-      bleOpLog(`GATT monitorCharacteristicForService(${deviceId}) — subscribed`);
+      bleOpLog(`GATT monitorCharacteristicForService(${deviceId}) — subscribed, settling ${NOTIFY_SETTLE_MS}ms before allowing writes`);
+
+      // See NOTIFY_SETTLE_MS — the queue (this.enqueue) guarantees no other
+      // GATT operation (including a calibrate() write) can start until this
+      // connect() call resolves, so blocking here for the settle window
+      // means every write is guaranteed to happen well after the notify
+      // subscription has actually taken effect at the radio level, not just
+      // in JS.
+      await new Promise((resolve) => setTimeout(resolve, NOTIFY_SETTLE_MS));
+      this.notifySettled = true;
+      bleOpLog(`notify subscription settled for ${deviceId}`);
 
       this.disconnectSubscription = this.manager.onDeviceDisconnected(device.id, () =>
         this.handleUnexpectedDisconnect(deviceId, deviceName)
@@ -373,6 +398,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     } catch (err) {
       bleOpLog(`performConnect(${deviceId}) — FAILED:`, err instanceof Error ? err.message : err);
       this.connectedDevice = null;
+      this.notifySettled = false;
       this.setConnectionState("error", err instanceof Error ? err.message : "Failed to connect");
       this.scheduleReconnect(deviceId, deviceName);
     }
@@ -387,6 +413,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     this.stopScan();
     this.notifySubscription?.remove();
     this.notifySubscription = null;
+    this.notifySettled = false;
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = null;
     const device = this.connectedDevice;
@@ -413,9 +440,18 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     // was queued) — anything ahead of it in the queue (a connect, a
     // reconnect) may have changed which device, if any, we're connected to.
     const device = this.connectedDevice;
-    bleOpLog(`performCalibrate() — device=${device?.id ?? "null"}, state=${this.connectionState}`);
+    bleOpLog(`performCalibrate() — device=${device?.id ?? "null"}, state=${this.connectionState}, notifySettled=${this.notifySettled}`);
     if (!device) {
       throw new Error("Not connected to a device");
+    }
+    // Belt-and-suspenders — the queue plus the settle delay in
+    // performConnect() should make this unreachable in practice (connect()
+    // can't resolve, and nothing else can be enqueued ahead of it, until
+    // notifySettled flips true), but a clear error here beats a write
+    // silently racing the notify subscription if some future change ever
+    // bypasses that ordering.
+    if (!this.notifySettled) {
+      throw new Error("Notify subscription not yet settled — try again in a moment");
     }
 
     const valueBase64 = base64.encode(CALIBRATE_TRIGGER_BYTE);
@@ -554,6 +590,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       return; // already superseded by a newer connection
     }
     this.connectedDevice = null;
+    this.notifySettled = false;
     if (this.forgotten) {
       bleOpLog(`onDeviceDisconnected — forgotten, not reconnecting`);
       return; // deliberate forgetDevice() — don't reconnect

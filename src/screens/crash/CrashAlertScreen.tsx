@@ -11,7 +11,7 @@ import { etaMinutes, haversineKm } from "../../lib/geo";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 import { initialsFor } from "../../hooks/useGuardians";
-import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
+import { SEVERITY_LABELS, remainingCountdownSeconds, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
 
 export function CrashAlertScreen() {
   const navigation = useNavigation<RootStackNavigation>();
@@ -29,7 +29,7 @@ export function CrashAlertScreen() {
   const assignResponder = useAssignResponder();
   const insets = useSafeAreaInsets();
 
-  const [secondsLeft, setSecondsLeft] = useState(totalSeconds);
+  const [secondsLeft, setSecondsLeft] = useState(() => remainingCountdownSeconds(receivedAt, totalSeconds));
   const [resolving, setResolving] = useState(false);
   const resolvedRef = useRef(false);
 

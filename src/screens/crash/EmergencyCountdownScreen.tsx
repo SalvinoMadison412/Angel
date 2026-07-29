@@ -7,7 +7,7 @@ import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } 
 import { useAuth, useGuardians } from "../../hooks";
 import { initialsFor } from "../../hooks/useGuardians";
 import { EMERGENCY_COUNTDOWN_SECONDS, cancelCrashEvent, sendGuardianAlert } from "../../services/emergency";
-import { triggerDescription } from "../../lib/crashSignals";
+import { remainingCountdownSeconds, triggerDescription } from "../../lib/crashSignals";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 
@@ -39,7 +39,9 @@ export function EmergencyCountdownScreen() {
   const { data: guardians } = useGuardians();
   const insets = useSafeAreaInsets();
 
-  const [secondsLeft, setSecondsLeft] = useState(EMERGENCY_COUNTDOWN_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    remainingCountdownSeconds(event.receivedAt, EMERGENCY_COUNTDOWN_SECONDS)
+  );
   const [phase, setPhase] = useState<Phase>("counting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const resolvedRef = useRef(false);

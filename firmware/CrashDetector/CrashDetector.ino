@@ -52,6 +52,16 @@ const unsigned long EXTREME_TILT_HOLD_MS = 4000;
 const float STILL_THRESH_G     = 5000.0 / ACCEL_LSB_PER_G;
 const unsigned long STILL_WINDOW_MS = 3000;
 const int FAULT_CONSECUTIVE_LIMIT = 100;
+// Calibration sampling — spread across loop() iterations (see calibrating/
+// below) instead of a blocking inner loop, so BLE.poll() and telemetry
+// never stall while averaging. CALIBRATION_SAMPLE_INTERVAL_MS mirrors the
+// original blocking version's `delay(20)` between samples; the timeout is
+// generous headroom over the ~1s nominal duration (50 samples x 20ms) for
+// the case where some loop iterations skip a sample due to a transient I2C
+// read failure elsewhere in loop().
+const int CALIBRATION_SAMPLE_COUNT = 50;
+const unsigned long CALIBRATION_SAMPLE_INTERVAL_MS = 20;
+const unsigned long CALIBRATION_TIMEOUT_MS = 3000;
 // Sensor is read and crash-evaluated every loop() for detection accuracy,
 // but the telemetry BLE notification is throttled to this interval — the
 // central's connection interval can't reliably drain a notify sent on every
@@ -64,6 +74,12 @@ const unsigned long TELEMETRY_INTERVAL_MS = 100;
 
 float refX = 0, refY = 0, refZ = ACCEL_LSB_PER_G;
 bool calibrated = false;
+
+bool calibrating = false;
+unsigned long calibrationStartedMs = 0;
+unsigned long lastCalibrationSampleMs = 0;
+int calibrationSamplesTaken = 0;
+double calibrationSumX = 0, calibrationSumY = 0, calibrationSumZ = 0;
 
 unsigned long lastTelemetryMs = 0;
 float lastMagG = 0;
@@ -97,25 +113,37 @@ void saveCalibration(float x, float y, float z) {
   Serial.println("Calibration saved.");
 }
 
-void runCalibration() {
+// Sent once averaging actually finishes (or times out) — the app's
+// CalibrateSensorScreen blocks its "success" state on this arriving rather
+// than on the write's own ack (see firmware/README.md). This notification
+// was previously never sent at all: calibration would silently save (or
+// silently fail) on-device with the app waiting the full 5s and timing out
+// every single time, regardless of BLE stability.
+void sendCalibrationComplete(bool success) {
+  String json = "{\"type\":\"calibration_complete\",\"calibrated\":" + String(success ? "true" : "false") + "}";
+  Serial.println(json);
+  crashChar.writeValue(json);
+}
+
+// Starts (or restarts, if one was already in progress) a non-blocking
+// calibration average. Actual sampling happens in loop() below, reusing
+// the same accelerometer read loop() already takes every iteration for
+// telemetry/crash detection — no separate blocking sample loop, so
+// BLE.poll() (and thus the connection itself) keeps running normally for
+// the ~1s this takes, instead of stalling.
+void startCalibration() {
   Serial.println("Calibrating... keep bike still and upright.");
-  const int N = 50;
-  double sx = 0, sy = 0, sz = 0;
-  int count = 0;
-  for (int i = 0; i < N; i++) {
-    int16_t accelGyro[6] = {0};
-    if (bmi160.getAccelGyroData(accelGyro) == 0) {
-      sx += accelGyro[3]; sy += accelGyro[4]; sz += accelGyro[5];
-      count++;
-    }
-    delay(20);
-  }
-  if (count > 0) saveCalibration(sx / count, sy / count, sz / count);
-  else Serial.println("Calibration failed: no sensor data.");
+  calibrating = true;
+  calibrationStartedMs = millis();
+  lastCalibrationSampleMs = calibrationStartedMs;
+  calibrationSamplesTaken = 0;
+  calibrationSumX = 0;
+  calibrationSumY = 0;
+  calibrationSumZ = 0;
 }
 
 void onCalibrateWrite(BLEDevice central, BLECharacteristic characteristic) {
-  runCalibration();
+  startCalibration();
 }
 
 int severityFromScore(int score) {
@@ -218,6 +246,34 @@ void loop() {
 
   float gx = accelGyro[0], gy = accelGyro[1], gz = accelGyro[2];
   float ax = accelGyro[3], ay = accelGyro[4], az = accelGyro[5];
+
+  // Non-blocking calibration averaging — only ever reaches here on a loop
+  // iteration with a successful sensor read (a failed read returns early
+  // above), so every accumulated sample is already known-good, same as the
+  // old blocking version's own success check.
+  if (calibrating) {
+    unsigned long now = millis();
+    if (now - lastCalibrationSampleMs >= CALIBRATION_SAMPLE_INTERVAL_MS) {
+      lastCalibrationSampleMs = now;
+      calibrationSumX += ax;
+      calibrationSumY += ay;
+      calibrationSumZ += az;
+      calibrationSamplesTaken++;
+      if (calibrationSamplesTaken >= CALIBRATION_SAMPLE_COUNT) {
+        calibrating = false;
+        saveCalibration(
+          calibrationSumX / calibrationSamplesTaken,
+          calibrationSumY / calibrationSamplesTaken,
+          calibrationSumZ / calibrationSamplesTaken
+        );
+        sendCalibrationComplete(true);
+      }
+    } else if (now - calibrationStartedMs > CALIBRATION_TIMEOUT_MS) {
+      calibrating = false;
+      Serial.println("Calibration timed out — not enough good samples.");
+      sendCalibrationComplete(false);
+    }
+  }
 
   float impactMagRaw = sqrt(ax*ax + ay*ay + az*az);
   float gyroMagRaw   = sqrt(gx*gx + gy*gy + gz*gz);
