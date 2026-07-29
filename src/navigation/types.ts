@@ -33,6 +33,9 @@ export type RootStackParamList = {
   CalibrateSensor: { mandatory?: boolean } | undefined;
   CrashAlert: CrashEvent & { totalSeconds: number };
   LiveIncident: { incidentId: string };
+  // Severity-1 events only — see shouldTriggerAlert in emergencyPipeline.ts.
+  EmergencyCountdown: CrashEvent;
+  EmergencyAlertSent: { guardianNames: string[] };
   GuardianForm: { guardianId?: string };
   // TEMP DIAGNOSTIC — remove once the calibration_complete investigation is
   // resolved. See screens/debug/DiagnosticScreen.tsx.

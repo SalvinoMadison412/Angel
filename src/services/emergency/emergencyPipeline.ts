@@ -6,10 +6,31 @@ import { MedicalSnapshot, notificationService } from "../notifications";
 import { Guardian, Incident } from "../../types/database";
 
 export const DEFAULT_COUNTDOWN_SECONDS = 10;
+// Severity-1 events go through the lighter guardians-only countdown
+// (EmergencyCountdownScreen) instead of the full responder-dispatch flow
+// below — see shouldTriggerAlert. Longer than DEFAULT_COUNTDOWN_SECONDS on
+// purpose: a severity-1 reading is the least certain signal, so the rider
+// gets more time to notice and cancel before guardians are texted.
+export const EMERGENCY_COUNTDOWN_SECONDS = 30;
 
-/** A severity-1 event is logged for calibration but never interrupts the rider. */
+/** A severity-1 event routes to the lighter guardians-only countdown instead of the full dispatch flow. */
 export function shouldTriggerAlert(event: CrashEvent): boolean {
   return event.severity >= 2;
+}
+
+// Best-effort GPS capture shared by both alert paths below — never blocks
+// or throws past this function; a crash alert must still go out even if
+// location permission was denied or the fix times out.
+async function captureCurrentLocation(): Promise<{ lat: number | null; lng: number | null }> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return { lat: null, lng: null };
+    const position = await Location.getCurrentPositionAsync({});
+    return { lat: position.coords.latitude, lng: position.coords.longitude };
+  } catch (err) {
+    console.warn("[emergency] failed to capture location", err);
+    return { lat: null, lng: null };
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -56,18 +77,7 @@ export interface ConfirmIncidentInput {
 export async function confirmIncident({ event, userId, deviceId, guardians }: ConfirmIncidentInput): Promise<Incident> {
   await logCrashEventLocally(event, "confirmed");
 
-  let lat: number | null = null;
-  let lng: number | null = null;
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === "granted") {
-      const position = await Location.getCurrentPositionAsync({});
-      lat = position.coords.latitude;
-      lng = position.coords.longitude;
-    }
-  } catch (err) {
-    console.warn("[emergency] failed to capture location for incident", err);
-  }
+  const { lat, lng } = await captureCurrentLocation();
 
   const { data, error } = await supabase
     .from("incidents")
@@ -111,4 +121,41 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
 
 export async function cancelCrashEvent(event: CrashEvent): Promise<void> {
   await logCrashEventLocally(event, "cancelled");
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Guardians-only alert path — runs once EmergencyCountdownScreen's 30s
+// countdown expires without the rider cancelling. Deliberately lighter
+// than confirmIncident() above: no incidents row, no responder dispatch —
+// just a real SMS to every guardian on record, sent server-side via the
+// notify-guardians Supabase Edge Function (Twilio). See
+// supabase/functions/notify-guardians for the delivery side.
+// ───────────────────────────────────────────────────────────────────────
+export interface SendGuardianAlertInput {
+  event: CrashEvent;
+  userId: string;
+}
+
+export interface SendGuardianAlertResult {
+  /** How many guardians the edge function actually got an SMS out to. */
+  sent: number;
+}
+
+export async function sendGuardianAlert({ event, userId }: SendGuardianAlertInput): Promise<SendGuardianAlertResult> {
+  await logCrashEventLocally(event, "confirmed");
+
+  const { lat, lng } = await captureCurrentLocation();
+
+  const { data, error } = await supabase.functions.invoke("notify-guardians", {
+    body: {
+      rider_id: userId,
+      severity: event.severity,
+      timestamp: new Date(event.receivedAt).toISOString(),
+      lat,
+      lng,
+    },
+  });
+  if (error) throw error;
+
+  return { sent: typeof data?.sent === "number" ? data.sent : 0 };
 }

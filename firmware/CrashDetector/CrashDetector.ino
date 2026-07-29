@@ -1,11 +1,12 @@
 // Angel CrashDetector — Arduino Nano ESP32 firmware
 //
 // Reads a BMI160 accelerometer/gyroscope over I2C via the DFRobot_BMI160
-// library and pushes BLE notifications: a "telemetry" reading every loop
-// iteration (the live impact/gyro/tilt stream the app's Home screen plots),
-// plus one-off "crash" (impact- or tilt-triggered), "fault" (the IMU
-// stopped responding), and "fault_cleared" notifications layered on top of
-// that same stream.
+// library and pushes BLE notifications: a "telemetry" reading at a throttled
+// 10 Hz (see TELEMETRY_INTERVAL_MS — the live impact/gyro/tilt stream the
+// app's Home screen plots; crash detection itself still runs at full loop
+// rate, only the BLE notify is throttled), plus one-off "crash" (impact- or
+// tilt-triggered), "fault" (the IMU stopped responding), and "fault_cleared"
+// notifications layered on top of that same stream.
 //
 // BLE contract
 // ------------
@@ -51,10 +52,20 @@ const unsigned long EXTREME_TILT_HOLD_MS = 4000;
 const float STILL_THRESH_G     = 5000.0 / ACCEL_LSB_PER_G;
 const unsigned long STILL_WINDOW_MS = 3000;
 const int FAULT_CONSECUTIVE_LIMIT = 100;
+// Sensor is read and crash-evaluated every loop() for detection accuracy,
+// but the telemetry BLE notification is throttled to this interval — the
+// central's connection interval can't reliably drain a notify sent on every
+// ~10ms loop tick, and flooding the same characteristic used for crash
+// events risks destabilizing the link (queue overflow / supervision
+// timeout) right after the app subscribes to it. 10 Hz is still smooth for
+// a live UI and comfortably inside what a typical connection interval can
+// carry alongside occasional crash/fault notifications.
+const unsigned long TELEMETRY_INTERVAL_MS = 100;
 
 float refX = 0, refY = 0, refZ = ACCEL_LSB_PER_G;
 bool calibrated = false;
 
+unsigned long lastTelemetryMs = 0;
 float lastMagG = 0;
 unsigned long stillSince = 0;
 bool wasImpact = false;
@@ -131,7 +142,7 @@ void sendReport(const char* type, const char* trigger, int severity,
   crashChar.writeValue(json);
 }
 
-// Sent once per loop iteration — the live stream the app's Home screen
+// Sent at TELEMETRY_INTERVAL_MS — the live stream the app's Home screen
 // cards render continuously. No `trigger`/`severity`: those only mean
 // something for a detected "crash" event, not an arbitrary instantaneous
 // reading.
@@ -233,7 +244,10 @@ void loop() {
     stillSince = 0;
   }
 
-  sendTelemetry(impactG, gyroDps, tilt, isStill);
+  if (millis() - lastTelemetryMs >= TELEMETRY_INTERVAL_MS) {
+    lastTelemetryMs = millis();
+    sendTelemetry(impactG, gyroDps, tilt, isStill);
+  }
 
   // Path 1: impact-triggered (existing behavior)
   if (impactG > IMPACT_LOW_G && !wasImpact) {

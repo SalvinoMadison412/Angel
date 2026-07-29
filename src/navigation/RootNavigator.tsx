@@ -9,6 +9,8 @@ import { OnboardingScreen } from "../screens/onboarding/OnboardingScreen";
 import { DeviceSetupScreen } from "../screens/device/DeviceSetupScreen";
 import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
 import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
+import { EmergencyCountdownScreen } from "../screens/crash/EmergencyCountdownScreen";
+import { EmergencyAlertSentScreen } from "../screens/crash/EmergencyAlertSentScreen";
 import { LiveIncidentScreen } from "../screens/incident/LiveIncidentScreen";
 import { GuardianFormScreen } from "../screens/guardians/GuardianFormScreen";
 import { DiagnosticScreen } from "../screens/debug/DiagnosticScreen";
@@ -18,7 +20,7 @@ import { useCrashDetector } from "../hooks/useCrashDetector";
 import { useDevice } from "../hooks/useDevice";
 import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
-import { DEFAULT_COUNTDOWN_SECONDS, logCrashEventLocally, shouldTriggerAlert } from "../services/emergency";
+import { DEFAULT_COUNTDOWN_SECONDS, shouldTriggerAlert } from "../services/emergency";
 import { colors } from "../theme";
 
 // The animation's own on-screen time — kept in sync with AnimatedSplash's
@@ -40,9 +42,11 @@ const navTheme = {
 
 // Listens for crash events from both the real sensor and the mock stream
 // (the Home screen's dev "simulate crash" panel feeds the mock one) and
-// routes severity >= 2 straight to the full-screen alert. Below-threshold
-// events still get logged locally for the calibration work described in
-// firmware/README.md — they just don't interrupt the rider.
+// routes every event to a fullscreen alert — severity >= 2 goes to the full
+// responder-dispatch flow, severity 1 to the lighter guardians-only
+// countdown (see shouldTriggerAlert). Each destination screen logs its own
+// outcome locally for the calibration work described in
+// firmware/README.md, same as before.
 function CrashDetectorListener() {
   const navigation = useNavigation<RootStackNavigation>();
   const real = useCrashDetector({ mock: false });
@@ -68,7 +72,7 @@ function CrashDetectorListener() {
     if (shouldTriggerAlert(event)) {
       navigation.navigate("CrashAlert", { ...event, totalSeconds: DEFAULT_COUNTDOWN_SECONDS });
     } else {
-      logCrashEventLocally(event, "below_threshold");
+      navigation.navigate("EmergencyCountdown", event);
     }
   }, [real.lastEvent, mock.lastEvent, navigation, device, setCalibrated]);
 
@@ -94,6 +98,12 @@ function AppNavigator() {
         <Stack.Screen name="DeviceSetup" component={DeviceSetupScreen} />
         <Stack.Screen name="CalibrateSensor" component={CalibrateSensorScreen} />
         <Stack.Screen name="CrashAlert" component={CrashAlertScreen} options={{ gestureEnabled: false }} />
+        <Stack.Screen
+          name="EmergencyCountdown"
+          component={EmergencyCountdownScreen}
+          options={{ gestureEnabled: false }}
+        />
+        <Stack.Screen name="EmergencyAlertSent" component={EmergencyAlertSentScreen} />
         <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
         <Stack.Screen name="Diagnostic" component={DiagnosticScreen} />

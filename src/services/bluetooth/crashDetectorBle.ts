@@ -109,18 +109,22 @@ async function requestBlePermissions(): Promise<boolean> {
   return granted === PermissionsAndroid.RESULTS.GRANTED;
 }
 
-function decodeCharacteristicValue(characteristic: Characteristic): unknown {
-  if (!characteristic.value) return null;
-  const json = base64.decode(characteristic.value);
-  return JSON.parse(json);
-}
-
 // TEMP DIAGNOSTIC LOGGING — added to get a real, timestamped sequence of
 // every GATT call against the device during a physical-device reproduction
 // of the Recalibrate connect/disconnect loop. Remove once the root cause is
 // confirmed from real log output (see the prompt that added this).
 function bleOpLog(...args: unknown[]) {
   console.log(`[BLE-OP][${new Date().toISOString()}]`, ...args);
+}
+
+// Packet-level debug logging — deliberately permanent, unlike bleOpLog
+// above. Every incoming notification is traced raw base64 -> decoded JSON
+// string -> parsed object -> schema result, so a packet that's silently
+// dropped (parse error, schema mismatch, wrong characteristic) is visible
+// instead of just disappearing. Left in place on purpose per the debugging
+// work that added this — do not remove.
+function blePacketLog(...args: unknown[]) {
+  console.log(`[BLE-PACKET][${new Date().toISOString()}]`, ...args);
 }
 
 /**
@@ -220,29 +224,35 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     let stopped = false;
 
     (async () => {
+      bleOpLog(`startScan() — requesting permissions`);
       const hasPermission = await requestBlePermissions();
       if (!hasPermission) {
+        bleOpLog(`startScan() FAILED — Bluetooth/location permission denied`);
         this.setConnectionState("error", "Bluetooth/location permission was denied");
         return;
       }
 
       const btState = await this.manager.state();
       if (btState !== BleState.PoweredOn) {
+        bleOpLog(`startScan() FAILED — Bluetooth adapter state=${btState}, not PoweredOn`);
         this.setConnectionState("error", "Bluetooth is turned off");
         return;
       }
 
       if (stopped) return;
+      bleOpLog(`SCANNING — filtering for service ${CRASH_SERVICE_UUID}, localName=${DEVICE_LOCAL_NAME}`);
       this.setConnectionState("scanning");
       const seen = new Set<string>();
 
       this.manager.startDeviceScan([CRASH_SERVICE_UUID], null, (error, device) => {
         if (error) {
+          bleOpLog(`SCAN error:`, error.message);
           this.setConnectionState("error", error.message);
           return;
         }
         if (!device || device.localName !== DEVICE_LOCAL_NAME || seen.has(device.id)) return;
         seen.add(device.id);
+        bleOpLog(`FOUND DEVICE ${device.id} (${device.localName})`);
         onDeviceFound({ id: device.id, name: device.localName ?? DEVICE_LOCAL_NAME });
       });
 
@@ -470,18 +480,36 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     }
     if (!characteristic) return;
 
-    let parsed: unknown;
-    try {
-      parsed = decodeCharacteristicValue(characteristic);
-    } catch (err) {
-      bleOpLog(`NOTIFY malformed (bad base64/JSON):`, err instanceof Error ? err.message : err);
-      console.warn("[ble] malformed BLE payload (bad base64/JSON), dropping", err);
+    const rawBase64 = characteristic.value;
+    blePacketLog(`characteristic=${characteristic.uuid} raw base64:`, rawBase64);
+    if (!rawBase64) {
+      blePacketLog(`empty characteristic value — dropping`);
       return;
     }
 
+    let decoded: string;
+    try {
+      decoded = base64.decode(rawBase64);
+    } catch (err) {
+      blePacketLog(`FAILED base64 decode:`, err instanceof Error ? err.message : err);
+      console.warn("[ble] malformed BLE payload (bad base64), dropping", err);
+      return;
+    }
+    blePacketLog(`decoded string:`, decoded);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(decoded);
+    } catch (err) {
+      blePacketLog(`FAILED JSON.parse:`, err instanceof Error ? err.message : err);
+      console.warn("[ble] malformed BLE payload (bad JSON), dropping", err);
+      return;
+    }
+    blePacketLog(`parsed JSON:`, parsed);
+
     const result = crashDetectorMessageSchema.safeParse(parsed);
     if (!result.success) {
-      bleOpLog(`NOTIFY malformed (schema mismatch):`, result.error.message, "raw:", JSON.stringify(parsed));
+      blePacketLog(`FAILED schema validation:`, result.error.message);
       console.warn("[ble] malformed BLE payload (schema mismatch), dropping", result.error.message);
       return;
     }
@@ -490,10 +518,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     // and a crash share no fields and must never be handled by the same
     // downstream path (a fault is a device-health problem, not an emergency).
     const message = result.data;
-    // Skip the per-packet diagnostic log for telemetry — it fires at the
-    // firmware's loop rate and would drown out the rare connect/disconnect
-    // events this temp logging exists to trace (see bleOpLog's own comment).
-    if (message.type !== "telemetry") bleOpLog(`NOTIFY received type=${message.type}`);
+    blePacketLog(`schema OK — type=${message.type}`);
     switch (message.type) {
       case "telemetry": {
         const reading = telemetryReadingFromMessage(message);

@@ -1,3 +1,4 @@
+import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
@@ -44,6 +45,17 @@ export function OnboardingScreen() {
 
   const advanceTo = async (next: number) => {
     if (next > TOTAL_STEPS) {
+      // Best-effort, asked once here rather than for the first time mid-
+      // emergency — a crash alert's Google Maps link needs this, and a
+      // permission dialog is the last thing a rider should see while a
+      // countdown is running. Declining doesn't block onboarding; the
+      // emergency pipeline re-requests at alert time as a fallback (see
+      // captureCurrentLocation in emergencyPipeline.ts).
+      try {
+        await Location.requestForegroundPermissionsAsync();
+      } catch (err) {
+        console.warn("[onboarding] failed to request location permission", err);
+      }
       await profile.completeOnboarding.mutateAsync();
       return;
     }

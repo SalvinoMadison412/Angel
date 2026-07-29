@@ -176,8 +176,8 @@ export function HomeScreen() {
       <GlassCard style={styles.debugCard}>
         <Text style={[type.kicker, styles.dimText]}>DEBUG · SIMULATE DEVICE SIGNAL</Text>
         <Text style={[type.bodySmall, styles.debugCopy]}>
-          Tap a severity to simulate a crash signal from the device. Severity 1 is logged but stays below the
-          alert threshold, so nothing appears on screen — that's expected.
+          Tap a severity to simulate a crash signal from the device. Severity 1 shows the 30s guardians-only
+          countdown; severity 2+ shows the full crash-alert/dispatch flow.
         </Text>
         <View style={styles.severityRow}>
           {[1, 2, 3, 4, 5].map((level) => (

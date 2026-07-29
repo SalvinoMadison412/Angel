@@ -61,8 +61,13 @@ first, and an unrecognized shape is dropped rather than guessed at.
 
 #### `type: "telemetry"`
 
-Sent once per loop iteration — this **is** the continuous stream, and it's
-what drives the live IMPACT/ROTATION/LEAN cards on the app's Home screen:
+Sent at a throttled 10 Hz (`TELEMETRY_INTERVAL_MS`) — this **is** the
+continuous stream, and it's what drives the live IMPACT/ROTATION/LEAN cards
+on the app's Home screen. Crash detection itself still evaluates every loop
+iteration at full sensor rate; only the BLE notify is throttled, since
+notifying on every ~10ms loop tick can outrun what a typical connection
+interval can drain and destabilize the link (this previously caused the
+sensor to stop connecting reliably once the telemetry stream was added):
 
 ```json
 {
