@@ -108,6 +108,17 @@ device-health problem, not a personal emergency — the app shows a banner on
 the Device screen and never routes this through the crash-alert/dispatch
 pipeline.
 
+#### `type: "calibration_complete"`
+
+```json
+{ "type": "calibration_complete", "calibrated": true }
+```
+
+Sent once a calibrate-characteristic write has actually finished averaging
+samples and been stored — asynchronously, not as the write's own ack. The
+app treats this as the authoritative signal for whether the mount reference
+is set, syncing its persisted `calibrated` flag from it.
+
 ## On the severity score
 
 The 1-5 score is a hand-picked threshold ladder (`IMPACT_LOW_G/HIGH_G`,

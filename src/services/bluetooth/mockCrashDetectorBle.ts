@@ -14,6 +14,7 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
   private faultListeners = new Set<(fault: DeviceFault | null) => void>();
+  private calibrationListeners = new Set<(calibrated: boolean) => void>();
   private paired: PairedDevice | null = null;
 
   getConnectionState(): ConnectionState {
@@ -77,6 +78,11 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
     return () => this.faultListeners.delete(listener);
   }
 
+  subscribeCalibrationComplete(listener: (calibrated: boolean) => void): () => void {
+    this.calibrationListeners.add(listener);
+    return () => this.calibrationListeners.delete(listener);
+  }
+
   async isAndroidLocationServicesDisabled(): Promise<boolean> {
     return false;
   }
@@ -105,6 +111,11 @@ export class MockCrashDetectorBleService implements CrashDetectorBle {
   /** Dev-only: injects a synthetic fault_cleared as if the real sensor sent it. */
   clearFault(): void {
     this.faultListeners.forEach((listener) => listener(null));
+  }
+
+  /** Dev-only: injects a synthetic calibration_complete as if the real sensor sent it. */
+  simulateCalibrationComplete(calibrated = true): void {
+    this.calibrationListeners.forEach((listener) => listener(calibrated));
   }
 
   private setConnectionState(state: ConnectionState, errorMessage?: string) {

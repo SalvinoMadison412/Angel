@@ -38,7 +38,6 @@ export function HomeScreen() {
   // badge exists to avoid.
   const isConnected = connectionState === "connected";
   const leanDeg = lastEvent && lastEvent.calibrated ? lastEvent.tilt / 4 : 0;
-  const emptyReadingMessage = isConnected ? "No readings yet" : "No device connected";
 
   // Feeds the mock BLE stream rather than writing an incident directly —
   // this exercises the exact same app-root listener → CrashAlertScreen →
@@ -87,7 +86,17 @@ export function HomeScreen() {
       <GlassCard style={styles.readingCard}>
         <Text style={[type.kicker, styles.dimText]}>LAST READING</Text>
         {!lastEvent ? (
-          <Text style={styles.emptyReading}>{emptyReadingMessage}</Text>
+          isConnected ? (
+            <>
+              <Text style={styles.emptyReading}>No incidents recorded yet</Text>
+              <Text style={styles.emptyReadingHint}>
+                This updates automatically the moment the sensor detects a hard impact or a tip-over — nothing to
+                do here until then.
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.emptyReading}>No device connected</Text>
+          )
         ) : (
           <>
             <View style={styles.readingSeverityRow}>
@@ -235,6 +244,7 @@ const styles = StyleSheet.create({
   motifWrap: { alignItems: "center", paddingVertical: spacing.xl },
   readingCard: {},
   emptyReading: { color: colors.textDim, marginTop: spacing.md },
+  emptyReadingHint: { color: colors.textDim, marginTop: spacing.sm, ...type.bodySmall },
   readingSeverityRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md },
   severityNumber: { fontFamily: type.display.fontFamily, fontSize: 36 },
   severityTextCol: { flex: 1 },

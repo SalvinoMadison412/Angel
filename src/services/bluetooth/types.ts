@@ -45,10 +45,20 @@ export const faultClearedMessageSchema = z.object({
   type: z.literal("fault_cleared"),
 });
 
+// Confirms an in-progress calibrate() write actually finished and was
+// stored — sent asynchronously over the same notify channel, separately
+// from the write's own ack. Keeps the persisted `calibrated` flag honest
+// even if the write ack alone isn't a reliable "done" signal.
+export const calibrationCompleteMessageSchema = z.object({
+  type: z.literal("calibration_complete"),
+  calibrated: z.boolean(),
+});
+
 export const crashDetectorMessageSchema = z.discriminatedUnion("type", [
   crashMessageSchema,
   faultMessageSchema,
   faultClearedMessageSchema,
+  calibrationCompleteMessageSchema,
 ]);
 
 export type CrashMessage = z.infer<typeof crashMessageSchema>;

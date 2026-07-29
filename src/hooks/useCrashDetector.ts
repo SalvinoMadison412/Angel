@@ -17,6 +17,9 @@ export function useCrashDetector(options?: { mock?: boolean }) {
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [lastEvent, setLastEvent] = useState<CrashEvent | null>(null);
   const [fault, setFault] = useState<DeviceFault | null>(null);
+  // Latest confirmed calibration state reported by the device, independent
+  // of the calibrate() write's own ack — null until one has ever arrived.
+  const [calibrationConfirmed, setCalibrationConfirmed] = useState<boolean | null>(null);
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([]);
   const [pairedDevice, setPairedDevice] = useState<PairedDevice | null>(null);
 
@@ -27,12 +30,14 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     });
     const unsubscribeEvents = service.subscribeCrashEvents(setLastEvent);
     const unsubscribeFault = service.subscribeFaultState(setFault);
+    const unsubscribeCalibration = service.subscribeCalibrationComplete(setCalibrationConfirmed);
     service.getPairedDevice().then(setPairedDevice);
 
     return () => {
       unsubscribeState();
       unsubscribeEvents();
       unsubscribeFault();
+      unsubscribeCalibration();
     };
   }, [service]);
 
@@ -79,12 +84,16 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     ? (reason?: string) => (service as MockCrashDetectorBleService).simulateFault(reason)
     : undefined;
   const clearSimulatedFault = mock ? () => (service as MockCrashDetectorBleService).clearFault() : undefined;
+  const simulateCalibrationComplete = mock
+    ? (calibrated?: boolean) => (service as MockCrashDetectorBleService).simulateCalibrationComplete(calibrated)
+    : undefined;
 
   return {
     connectionState,
     errorMessage,
     lastEvent,
     fault,
+    calibrationConfirmed,
     discoveredDevices,
     pairedDevice,
     scan,
@@ -96,5 +105,6 @@ export function useCrashDetector(options?: { mock?: boolean }) {
     simulateCrash,
     simulateFault,
     clearSimulatedFault,
+    simulateCalibrationComplete,
   };
 }

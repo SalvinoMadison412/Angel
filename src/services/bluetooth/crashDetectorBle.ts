@@ -72,6 +72,8 @@ export interface CrashDetectorBle {
    * `subscribeCrashEvents` — a fault is not a crash.
    */
   subscribeFaultState(listener: (fault: DeviceFault | null) => void): () => void;
+  /** Fires with the device's confirmed calibration state whenever it reports one — see calibration_complete. */
+  subscribeCalibrationComplete(listener: (calibrated: boolean) => void): () => void;
   /** True if Android and BLE scanning is likely to return nothing because location services are off. */
   isAndroidLocationServicesDisabled(): Promise<boolean>;
 }
@@ -116,6 +118,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private eventListeners = new Set<(event: CrashEvent) => void>();
   private faultListeners = new Set<(fault: DeviceFault | null) => void>();
+  private calibrationListeners = new Set<(calibrated: boolean) => void>();
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -269,6 +272,11 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     return () => this.faultListeners.delete(listener);
   }
 
+  subscribeCalibrationComplete(listener: (calibrated: boolean) => void): () => void {
+    this.calibrationListeners.add(listener);
+    return () => this.calibrationListeners.delete(listener);
+  }
+
   async isAndroidLocationServicesDisabled(): Promise<boolean> {
     if (Platform.OS !== "android") return false;
     const enabled = await Location.hasServicesEnabledAsync();
@@ -315,6 +323,10 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       }
       case "fault_cleared": {
         this.faultListeners.forEach((listener) => listener(null));
+        return;
+      }
+      case "calibration_complete": {
+        this.calibrationListeners.forEach((listener) => listener(message.calibrated));
         return;
       }
     }

@@ -55,6 +55,10 @@ export class UnavailableCrashDetectorBleService implements CrashDetectorBle {
     return () => {};
   }
 
+  subscribeCalibrationComplete(_listener: (calibrated: boolean) => void): () => void {
+    return () => {};
+  }
+
   async isAndroidLocationServicesDisabled(): Promise<boolean> {
     return false;
   }

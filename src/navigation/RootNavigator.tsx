@@ -71,6 +71,17 @@ function CrashDetectorListener() {
     }
   }, [real.lastEvent, mock.lastEvent, navigation, device, setCalibrated]);
 
+  // A calibrate() write's ack isn't the authoritative "done" signal — the
+  // device confirms separately, asynchronously, once calibration actually
+  // finishes and is stored. Mirrors the same-purpose sync above for crash
+  // events, just from a dedicated channel instead of piggybacking on one.
+  useEffect(() => {
+    if (real.calibrationConfirmed === null || !device) return;
+    if (device.calibrated !== real.calibrationConfirmed) {
+      setCalibrated.mutate(real.calibrationConfirmed);
+    }
+  }, [real.calibrationConfirmed, device, setCalibrated]);
+
   return null;
 }
 
