@@ -131,6 +131,29 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private forgotten = false;
+  // Every GATT call against this device — connect, disconnect, any
+  // characteristic write — is chained onto this so exactly one is ever in
+  // flight at a time. Android's BLE stack does not reliably handle
+  // overlapping GATT operations (issuing a second one before a prior one
+  // resolves is a well-known cause of spontaneous disconnects, surfacing
+  // as GATT error 133); a background reconnect firing while a foreground
+  // calibrate() write is in flight is exactly that scenario. Always
+  // settles to resolved regardless of the wrapped operation's outcome, so
+  // one failed/rejected operation never permanently wedges the queue.
+  private operationTail: Promise<void> = Promise.resolve();
+  // Lets a redundant connect() call for a device we're already busy
+  // connecting to await the same in-flight attempt instead of queuing a
+  // second, fully-redundant one behind it.
+  private pendingConnect: { deviceId: string; promise: Promise<void> } | null = null;
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operationTail.then(() => operation());
+    this.operationTail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
 
   getConnectionState(): ConnectionState {
     return this.connectionState;
@@ -225,6 +248,27 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     // disconnect, not just a UI-level one.
     if (this.isAlreadyConnectedTo(deviceId)) return;
 
+    // A connect for this same device is already queued or running (e.g. a
+    // background reconnect fired right as a screen's mount effect also
+    // asked to connect) — join that attempt instead of queuing a second,
+    // redundant one behind it.
+    if (this.pendingConnect?.deviceId === deviceId) return this.pendingConnect.promise;
+
+    const promise = this.enqueue(() => this.performConnect(deviceId, deviceName));
+    this.pendingConnect = { deviceId, promise };
+    try {
+      await promise;
+    } finally {
+      if (this.pendingConnect?.promise === promise) this.pendingConnect = null;
+    }
+  }
+
+  private async performConnect(deviceId: string, deviceName: string): Promise<void> {
+    // Re-check here, inside the queue: by the time this operation reaches
+    // the front, an earlier queued op (e.g. another connect attempt that
+    // was already running) may have connected us already.
+    if (this.isAlreadyConnectedTo(deviceId)) return;
+
     this.stopScan();
     this.clearReconnectTimer();
     this.forgotten = false;
@@ -263,6 +307,10 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   }
 
   async disconnect(): Promise<void> {
+    return this.enqueue(() => this.performDisconnect());
+  }
+
+  private async performDisconnect(): Promise<void> {
     this.clearReconnectTimer();
     this.stopScan();
     this.notifySubscription?.remove();
@@ -282,6 +330,13 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   }
 
   async calibrate(): Promise<void> {
+    return this.enqueue(() => this.performCalibrate());
+  }
+
+  private async performCalibrate(): Promise<void> {
+    // Read fresh, at the moment this operation actually runs (not when it
+    // was queued) — anything ahead of it in the queue (a connect, a
+    // reconnect) may have changed which device, if any, we're connected to.
     const device = this.connectedDevice;
     if (!device) {
       throw new Error("Not connected to a device");
