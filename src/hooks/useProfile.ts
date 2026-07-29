@@ -37,5 +37,13 @@ export function useProfile() {
     onSuccess: invalidate,
   });
 
-  return { ...query, setOnboardingStep, completeOnboarding };
+  const save = useMutation({
+    mutationFn: async (input: { name: string; phone: string }) => {
+      const { error } = await supabase.from("profiles").update({ name: input.name, phone: input.phone }).eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  return { ...query, setOnboardingStep, completeOnboarding, save };
 }

@@ -152,15 +152,6 @@ export function EmergencyCountdownScreen() {
           </View>
           <Text style={[type.bodySmall, styles.triggerCopy]}>{triggerDescription(event.trigger)}</Text>
 
-          {!event.calibrated && (
-            <View style={styles.uncalibratedBanner}>
-              <Text style={[type.kicker, styles.uncalibratedText]}>⚠ SENSOR NOT CALIBRATED</Text>
-              <Text style={[type.bodySmall, styles.uncalibratedCopy]}>
-                The sensor's mounting reference wasn't set when this was detected — tilt wasn't measurable, so the
-                severity above may be off.
-              </Text>
-            </View>
-          )}
           <Text style={[type.label, styles.metaRow]}>
             IMPACT {event.impactG.toFixed(2)}G   ROTATION {event.gyroDps.toFixed(0)}°/S   LEAN{" "}
             {event.calibrated ? `${event.tilt.toFixed(0)}°` : "—"}
@@ -230,16 +221,6 @@ const styles = StyleSheet.create({
   triggerCopy: { color: colors.textMuted, marginTop: spacing.sm },
   metaRow: { color: colors.textMuted, marginTop: spacing.md },
   caveat: { color: colors.textDim, marginTop: spacing.sm },
-  uncalibratedBanner: {
-    borderWidth: 1,
-    borderColor: colors.accentBorder,
-    backgroundColor: colors.accentMuted,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.md,
-  },
-  uncalibratedText: { color: colors.accent },
-  uncalibratedCopy: { color: colors.textMuted, marginTop: spacing.xs },
   countdownWrap: { marginTop: spacing.lg },
   copy: { color: colors.textMuted, textAlign: "center", paddingHorizontal: spacing.lg },
   errorCopy: { color: colors.accent, textAlign: "center", paddingHorizontal: spacing.lg, ...type.bodySmall },

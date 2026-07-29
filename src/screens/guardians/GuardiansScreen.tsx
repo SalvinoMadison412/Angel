@@ -61,18 +61,6 @@ export function GuardiansScreen() {
           <Text style={styles.addText}>+ ADD GUARDIAN</Text>
         </View>
       </Pressable>
-
-      <GlassCard style={styles.infoCard}>
-        <Text style={[type.kicker, styles.infoKicker]}>IF NO ONE ANSWERS</Text>
-        <Text style={[type.bodySmall, styles.infoBody]}>
-          After 90 seconds Angel dispatches the nearest onboarded gig partner. Severity 4–5 also calls an auto or cab
-          to the exact drop pin.
-        </Text>
-        <View style={styles.infoTags}>
-          <Tag label="GIG RIDERS · S1–S3" variant="outline" />
-          <Tag label="CAR / AUTO · S4–S5" variant="accent" />
-        </View>
-      </GlassCard>
     </ScreenBackground>
   );
 }
@@ -100,8 +88,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   addText: { color: colors.textMuted, fontFamily: type.button.fontFamily, fontSize: 13, letterSpacing: 1.5 },
-  infoCard: { marginTop: spacing.md },
-  infoKicker: { color: colors.accent },
-  infoBody: { color: colors.textMuted, marginTop: spacing.md },
-  infoTags: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg, flexWrap: "wrap" },
 });
