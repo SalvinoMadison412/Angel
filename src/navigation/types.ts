@@ -34,6 +34,9 @@ export type RootStackParamList = {
   CrashAlert: CrashEvent & { totalSeconds: number };
   LiveIncident: { incidentId: string };
   GuardianForm: { guardianId?: string };
+  // TEMP DIAGNOSTIC — remove once the calibration_complete investigation is
+  // resolved. See screens/debug/DiagnosticScreen.tsx.
+  Diagnostic: undefined;
 };
 
 export type RootStackNavigation = NativeStackNavigationProp<RootStackParamList>;

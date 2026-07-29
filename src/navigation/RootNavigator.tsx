@@ -11,6 +11,7 @@ import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
 import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
 import { LiveIncidentScreen } from "../screens/incident/LiveIncidentScreen";
 import { GuardianFormScreen } from "../screens/guardians/GuardianFormScreen";
+import { DiagnosticScreen } from "../screens/debug/DiagnosticScreen";
 import { RootStackNavigation, RootStackParamList } from "./types";
 import { useAuth } from "../hooks/useAuth";
 import { useCrashDetector } from "../hooks/useCrashDetector";
@@ -95,6 +96,7 @@ function AppNavigator() {
         <Stack.Screen name="CrashAlert" component={CrashAlertScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
+        <Stack.Screen name="Diagnostic" component={DiagnosticScreen} />
       </Stack.Navigator>
       <CrashDetectorListener />
     </>

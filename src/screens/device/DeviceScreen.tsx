@@ -132,6 +132,20 @@ export function DeviceScreen() {
           Every mount sits at a different angle. Re-calibrate any time the device is remounted.
         </Text>
       </GlassCard>
+
+      {/* TEMP DEBUG — remove once the calibration_complete investigation is resolved. */}
+      <GlassCard style={styles.debugCard}>
+        <Text style={[type.kicker, styles.dim]}>TEMP · DEBUG</Text>
+        <Text style={[type.bodySmall, styles.hint]}>
+          Raw values received from the device over BLE, live — to confirm whether data is actually reaching the app.
+        </Text>
+        <PillButton
+          title="VIEW RAW BLE DATA"
+          variant="outline"
+          onPress={() => navigation.navigate("Diagnostic")}
+          style={styles.pairButton}
+        />
+      </GlassCard>
     </ScreenBackground>
   );
 }
@@ -151,6 +165,7 @@ const styles = StyleSheet.create({
   dim: { color: colors.textDim },
   faultTitle: { color: colors.danger },
   faultCopy: { color: colors.textMuted, marginTop: spacing.sm },
+  debugCard: { borderStyle: "dashed" as const, borderColor: colors.glassBorder },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
