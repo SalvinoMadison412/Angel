@@ -106,6 +106,14 @@ function decodeCharacteristicValue(characteristic: Characteristic): unknown {
   return JSON.parse(json);
 }
 
+// TEMP DIAGNOSTIC LOGGING — added to get a real, timestamped sequence of
+// every GATT call against the device during a physical-device reproduction
+// of the Recalibrate connect/disconnect loop. Remove once the root cause is
+// confirmed from real log output (see the prompt that added this).
+function bleOpLog(...args: unknown[]) {
+  console.log(`[BLE-OP][${new Date().toISOString()}]`, ...args);
+}
+
 /**
  * Real BLE implementation backed by react-native-ble-plx. Requires the
  * custom dev client / prebuilt native project — see the root README. This
@@ -146,8 +154,17 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   // second, fully-redundant one behind it.
   private pendingConnect: { deviceId: string; promise: Promise<void> } | null = null;
 
-  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.operationTail.then(() => operation());
+  private enqueue<T>(label: string, operation: () => Promise<T>): Promise<T> {
+    const queuedAt = Date.now();
+    bleOpLog(`ENQUEUE ${label}`);
+    const result = this.operationTail.then(() => {
+      bleOpLog(`START ${label} (waited ${Date.now() - queuedAt}ms in queue)`);
+      return operation();
+    });
+    result.then(
+      () => bleOpLog(`DONE ${label}`),
+      (err) => bleOpLog(`FAILED ${label}:`, err instanceof Error ? err.message : err)
+    );
     this.operationTail = result.then(
       () => undefined,
       () => undefined
@@ -240,21 +257,29 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   }
 
   async connect(deviceId: string, deviceName: string): Promise<void> {
+    bleOpLog(`connect() called for ${deviceId} — current state=${this.connectionState}, connectedDevice=${this.connectedDevice?.id ?? "null"}`);
+
     // Idempotency guard — a redundant call while already connected to this
     // exact device (see isAlreadyConnectedTo) must be a true no-op. Without
     // this, re-issuing connectToDevice() on an already-connected peripheral
     // forces a real "connecting" transition and, on Android, can make the
     // native BLE stack tear down and re-negotiate the GATT link — a genuine
     // disconnect, not just a UI-level one.
-    if (this.isAlreadyConnectedTo(deviceId)) return;
+    if (this.isAlreadyConnectedTo(deviceId)) {
+      bleOpLog(`connect() SKIPPED — already connected to ${deviceId}`);
+      return;
+    }
 
     // A connect for this same device is already queued or running (e.g. a
     // background reconnect fired right as a screen's mount effect also
     // asked to connect) — join that attempt instead of queuing a second,
     // redundant one behind it.
-    if (this.pendingConnect?.deviceId === deviceId) return this.pendingConnect.promise;
+    if (this.pendingConnect?.deviceId === deviceId) {
+      bleOpLog(`connect() JOINING existing pending connect for ${deviceId}`);
+      return this.pendingConnect.promise;
+    }
 
-    const promise = this.enqueue(() => this.performConnect(deviceId, deviceName));
+    const promise = this.enqueue(`connect(${deviceId})`, () => this.performConnect(deviceId, deviceName));
     this.pendingConnect = { deviceId, promise };
     try {
       await promise;
@@ -267,7 +292,10 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     // Re-check here, inside the queue: by the time this operation reaches
     // the front, an earlier queued op (e.g. another connect attempt that
     // was already running) may have connected us already.
-    if (this.isAlreadyConnectedTo(deviceId)) return;
+    if (this.isAlreadyConnectedTo(deviceId)) {
+      bleOpLog(`performConnect() SKIPPED — already connected to ${deviceId} by the time this ran`);
+      return;
+    }
 
     this.stopScan();
     this.clearReconnectTimer();
@@ -275,8 +303,14 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     this.setConnectionState("connecting");
 
     try {
+      bleOpLog(`GATT connectToDevice(${deviceId}) — issuing`);
       let device = await this.manager.connectToDevice(deviceId, { autoConnect: false });
+      bleOpLog(`GATT connectToDevice(${deviceId}) — resolved`);
+
+      bleOpLog(`GATT discoverAllServicesAndCharacteristics(${deviceId}) — issuing`);
       device = await device.discoverAllServicesAndCharacteristics();
+      bleOpLog(`GATT discoverAllServicesAndCharacteristics(${deviceId}) — resolved`);
+
       this.connectedDevice = device;
       this.reconnectAttempt = 0;
 
@@ -286,12 +320,14 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       // logic twice, each duplicating listeners further.
       this.notifySubscription?.remove();
       this.disconnectSubscription?.remove();
+      bleOpLog(`GATT monitorCharacteristicForService(${deviceId}) — subscribing`);
 
       this.notifySubscription = device.monitorCharacteristicForService(
         CRASH_SERVICE_UUID,
         CRASH_CHARACTERISTIC_UUID,
         (error, characteristic) => this.handleNotification(error, characteristic)
       );
+      bleOpLog(`GATT monitorCharacteristicForService(${deviceId}) — subscribed`);
 
       this.disconnectSubscription = this.manager.onDeviceDisconnected(device.id, () =>
         this.handleUnexpectedDisconnect(deviceId, deviceName)
@@ -299,7 +335,9 @@ export class CrashDetectorBleService implements CrashDetectorBle {
 
       await SecureStore.setItemAsync(PAIRED_DEVICE_KEY, JSON.stringify({ id: deviceId, name: deviceName }));
       this.setConnectionState("connected");
+      bleOpLog(`performConnect(${deviceId}) — SUCCESS, state=connected`);
     } catch (err) {
+      bleOpLog(`performConnect(${deviceId}) — FAILED:`, err instanceof Error ? err.message : err);
       this.connectedDevice = null;
       this.setConnectionState("error", err instanceof Error ? err.message : "Failed to connect");
       this.scheduleReconnect(deviceId, deviceName);
@@ -307,7 +345,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   }
 
   async disconnect(): Promise<void> {
-    return this.enqueue(() => this.performDisconnect());
+    return this.enqueue("disconnect()", () => this.performDisconnect());
   }
 
   private async performDisconnect(): Promise<void> {
@@ -321,16 +359,19 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     this.connectedDevice = null;
     if (device) {
       try {
+        bleOpLog(`GATT cancelDeviceConnection(${device.id}) — issuing`);
         await this.manager.cancelDeviceConnection(device.id);
-      } catch {
+        bleOpLog(`GATT cancelDeviceConnection(${device.id}) — resolved`);
+      } catch (err) {
         // already disconnected — nothing to clean up
+        bleOpLog(`GATT cancelDeviceConnection(${device.id}) — rejected (likely already disconnected):`, err instanceof Error ? err.message : err);
       }
     }
     this.setConnectionState("disconnected");
   }
 
   async calibrate(): Promise<void> {
-    return this.enqueue(() => this.performCalibrate());
+    return this.enqueue("calibrate()", () => this.performCalibrate());
   }
 
   private async performCalibrate(): Promise<void> {
@@ -338,16 +379,24 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     // was queued) — anything ahead of it in the queue (a connect, a
     // reconnect) may have changed which device, if any, we're connected to.
     const device = this.connectedDevice;
+    bleOpLog(`performCalibrate() — device=${device?.id ?? "null"}, state=${this.connectionState}`);
     if (!device) {
       throw new Error("Not connected to a device");
     }
 
     const valueBase64 = base64.encode(CALIBRATE_TRIGGER_BYTE);
-    await withTimeout(
-      device.writeCharacteristicWithResponseForService(CRASH_SERVICE_UUID, CALIBRATE_CHARACTERISTIC_UUID, valueBase64),
-      CALIBRATE_TIMEOUT_MS,
-      "Calibration timed out — check the device is still connected and try again"
-    );
+    bleOpLog(`GATT writeCharacteristicWithResponseForService(${device.id}, calibrate) — issuing`);
+    try {
+      await withTimeout(
+        device.writeCharacteristicWithResponseForService(CRASH_SERVICE_UUID, CALIBRATE_CHARACTERISTIC_UUID, valueBase64),
+        CALIBRATE_TIMEOUT_MS,
+        "Calibration timed out — check the device is still connected and try again"
+      );
+      bleOpLog(`GATT writeCharacteristicWithResponseForService(${device.id}, calibrate) — resolved (write acked)`);
+    } catch (err) {
+      bleOpLog(`GATT writeCharacteristicWithResponseForService(${device.id}, calibrate) — REJECTED:`, err instanceof Error ? err.message : err);
+      throw err;
+    }
   }
 
   async forgetDevice(): Promise<void> {
@@ -386,6 +435,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     if (error) {
       // A drop mid-notify surfaces here too — the disconnect listener
       // handles reconnect, this is just diagnostic.
+      bleOpLog(`NOTIFY error:`, error.message);
       console.warn("[ble] characteristic notification error", error.message);
       return;
     }
@@ -395,12 +445,14 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     try {
       parsed = decodeCharacteristicValue(characteristic);
     } catch (err) {
+      bleOpLog(`NOTIFY malformed (bad base64/JSON):`, err instanceof Error ? err.message : err);
       console.warn("[ble] malformed BLE payload (bad base64/JSON), dropping", err);
       return;
     }
 
     const result = crashDetectorMessageSchema.safeParse(parsed);
     if (!result.success) {
+      bleOpLog(`NOTIFY malformed (schema mismatch):`, result.error.message, "raw:", JSON.stringify(parsed));
       console.warn("[ble] malformed BLE payload (schema mismatch), dropping", result.error.message);
       return;
     }
@@ -409,6 +461,7 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     // and a crash share no fields and must never be handled by the same
     // downstream path (a fault is a device-health problem, not an emergency).
     const message = result.data;
+    bleOpLog(`NOTIFY received type=${message.type}`);
     switch (message.type) {
       case "crash": {
         const event = crashEventFromMessage(message);
@@ -433,9 +486,16 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   }
 
   private handleUnexpectedDisconnect(deviceId: string, deviceName: string) {
-    if (this.connectedDevice?.id !== deviceId) return; // already superseded by a newer connection
+    bleOpLog(`onDeviceDisconnected FIRED for ${deviceId} — connectedDevice=${this.connectedDevice?.id ?? "null"}, forgotten=${this.forgotten}`);
+    if (this.connectedDevice?.id !== deviceId) {
+      bleOpLog(`onDeviceDisconnected IGNORED — superseded by a newer connection`);
+      return; // already superseded by a newer connection
+    }
     this.connectedDevice = null;
-    if (this.forgotten) return; // deliberate forgetDevice() — don't reconnect
+    if (this.forgotten) {
+      bleOpLog(`onDeviceDisconnected — forgotten, not reconnecting`);
+      return; // deliberate forgetDevice() — don't reconnect
+    }
 
     this.setConnectionState("connecting", "Connection dropped — reconnecting");
     this.scheduleReconnect(deviceId, deviceName);
@@ -444,8 +504,10 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   private scheduleReconnect(deviceId: string, deviceName: string) {
     if (this.forgotten) return;
     const delay = RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+    bleOpLog(`scheduleReconnect(${deviceId}) — attempt #${this.reconnectAttempt}, delay=${delay}ms`);
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
+      bleOpLog(`scheduleReconnect(${deviceId}) — timer fired, calling connect()`);
       this.connect(deviceId, deviceName);
     }, delay);
   }

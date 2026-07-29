@@ -13,6 +13,11 @@ type Status = "idle" | "calibrating" | "success" | "error";
 // occasionally be missed, so this must not wait forever.
 const CONFIRMATION_TIMEOUT_MS = 5000;
 
+// TEMP DIAGNOSTIC LOGGING — see crashDetectorBle.ts's bleOpLog for why.
+function calibrateLog(...args: unknown[]) {
+  console.log(`[CALIBRATE][${new Date().toISOString()}]`, ...args);
+}
+
 /**
  * Reused for both first-time setup (pushed by DeviceSetupScreen right
  * after a successful pair, with `mandatory: true`) and later recalibration
@@ -71,14 +76,21 @@ export function CalibrateSensorScreen() {
   // calibration_complete notification arrives while we're waiting on one.
   useEffect(() => {
     if (status !== "calibrating" || !calibrationConfirmation) return;
-    if (waitStartedAtRef.current === null || calibrationConfirmation.receivedAt < waitStartedAtRef.current) return;
+    if (waitStartedAtRef.current === null || calibrationConfirmation.receivedAt < waitStartedAtRef.current) {
+      calibrateLog(
+        `calibrationConfirmation received but IGNORED — stale (receivedAt=${calibrationConfirmation.receivedAt}, waitStartedAt=${waitStartedAtRef.current})`
+      );
+      return;
+    }
 
     if (calibrationConfirmation.calibrated) {
+      calibrateLog(`calibrationConfirmation received: calibrated=true — SUCCESS`);
       if (!device || !device.calibrated) {
         setCalibrated.mutate(true);
       }
       setStatus("success");
     } else {
+      calibrateLog(`calibrationConfirmation received: calibrated=false — device-reported FAILURE`);
       // The device itself is telling us the average didn't take (e.g. it
       // moved mid-sample) — a real failure, not a dropped notification.
       setStatus("error");
@@ -90,6 +102,7 @@ export function CalibrateSensorScreen() {
   useEffect(() => {
     if (status !== "calibrating") return;
     const timer = setTimeout(() => {
+      calibrateLog(`CONFIRMATION TIMEOUT — no calibration_complete within ${CONFIRMATION_TIMEOUT_MS}ms`);
       setStatus("error");
       setErrorMessage(
         "No confirmation came back from the sensor — the signal may have been missed. Check it's still nearby and try again."
@@ -103,18 +116,25 @@ export function CalibrateSensorScreen() {
   // on every momentary blip (that's the whole point of `isLinked`).
   useEffect(() => {
     if (status !== "calibrating" || isLinked) return;
+    calibrateLog(`CONNECTION LOST mid-wait (isLinked went false while status=calibrating) — failing attempt`);
     setStatus("error");
     setErrorMessage("Connection to the sensor was lost before calibration finished. Reconnect and try again.");
   }, [status, isLinked]);
 
   const handleCalibrate = async () => {
-    if (inFlightRef.current) return; // already calibrating — ignore a stray double-tap
+    if (inFlightRef.current) {
+      calibrateLog(`handleCalibrate() called but IGNORED — already in flight`);
+      return; // already calibrating — ignore a stray double-tap
+    }
+    calibrateLog(`handleCalibrate() START — isLinked=${isLinked}`);
     inFlightRef.current = true;
     setStatus("calibrating");
     setErrorMessage(null);
     waitStartedAtRef.current = Date.now();
     try {
+      calibrateLog(`calling calibrate() (the GATT write)`);
       await calibrate();
+      calibrateLog(`calibrate() write acked — now waiting for calibration_complete notification`);
       if (!device) {
         await ensureDevice.mutateAsync();
       }
@@ -122,6 +142,7 @@ export function CalibrateSensorScreen() {
       // means the device received the command, not that calibration
       // finished. The effects above resolve this from here.
     } catch (err) {
+      calibrateLog(`calibrate() write REJECTED:`, err instanceof Error ? err.message : err);
       setStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "Calibration failed — check the sensor is connected.");
     }

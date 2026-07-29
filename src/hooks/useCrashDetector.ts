@@ -16,6 +16,13 @@ import {
 // every sub-second hiccup reads as broken even when it isn't.
 const RECONNECT_GRACE_MS = 2000;
 
+// TEMP DIAGNOSTIC LOGGING — see crashDetectorBle.ts's bleOpLog for why.
+// Only logs the real (non-mock) instance's debounce decisions, to keep the
+// mock debug panel's traffic out of the trail.
+function bleStateLog(...args: unknown[]) {
+  console.log(`[BLE-STATE][${new Date().toISOString()}]`, ...args);
+}
+
 /** `linkStatus` extends the service's own states with a UI-only "reconnecting" — see RECONNECT_GRACE_MS. */
 export type LinkStatus = ConnectionState | "reconnecting";
 
@@ -43,6 +50,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
 
   useEffect(() => {
     const unsubscribeState = service.subscribeConnectionState((state, message) => {
+      if (!mock) bleStateLog(`raw connectionState -> ${state}${message ? ` (${message})` : ""}`);
       setConnectionState(state);
       setErrorMessage(message);
 
@@ -56,6 +64,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
         }
         lastCommittedStateRef.current = "connected";
         setLinkStatus("connected");
+        if (!mock) bleStateLog(`linkStatus -> connected (committed immediately)`);
         return;
       }
 
@@ -66,11 +75,13 @@ export function useCrashDetector(options?: { mock?: boolean }) {
         // error can all be the first thing seen mid-blip). Only escalate
         // to the real state if the drop outlasts the window.
         setLinkStatus("reconnecting");
+        if (!mock) bleStateLog(`linkStatus -> reconnecting (holding for ${RECONNECT_GRACE_MS}ms grace window)`);
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = null;
           lastCommittedStateRef.current = state;
           setLinkStatus(state);
+          if (!mock) bleStateLog(`grace window expired — linkStatus -> ${state} (real disconnect committed)`);
         }, RECONNECT_GRACE_MS);
         return;
       }
@@ -79,6 +90,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
       // disconnected/error) — nothing to debounce, reflect it immediately.
       lastCommittedStateRef.current = state;
       setLinkStatus(state);
+      if (!mock) bleStateLog(`linkStatus -> ${state} (no debounce — wasn't connected before this)`);
     });
     const unsubscribeEvents = service.subscribeCrashEvents(setLastEvent);
     const unsubscribeFault = service.subscribeFaultState(setFault);
@@ -95,10 +107,13 @@ export function useCrashDetector(options?: { mock?: boolean }) {
   }, [service]);
 
   // A previously paired device should reconnect on its own when the app
-  // (re)starts — the rider shouldn't have to re-pair every ride.
+  // (re)starts — the rider shouldn't have to re-pair every ride. Runs on
+  // every mount of every component calling this hook (real instance), not
+  // just app launch — see connect()'s idempotency guard in crashDetectorBle.ts.
   useEffect(() => {
+    if (!mock) bleStateLog(`hook mounted — calling reconnectToPairedDevice()`);
     service.reconnectToPairedDevice();
-  }, [service]);
+  }, [service, mock]);
 
   const scan = useCallback(() => {
     setDiscoveredDevices([]);
