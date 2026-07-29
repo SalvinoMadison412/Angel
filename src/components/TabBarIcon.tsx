@@ -1,7 +1,7 @@
 import React from "react";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
-export type TabBarIconName = "home" | "device" | "guardians" | "profile";
+export type TabBarIconName = "home" | "device" | "guardians" | "profile" | "debug";
 
 interface Props {
   name: TabBarIconName;
@@ -43,6 +43,13 @@ export function TabBarIcon({ name, color, size = 22 }: Props) {
         <>
           <Circle cx={12} cy={8} r={3.5} stroke={color} strokeWidth={1.75} fill="none" />
           <Path {...common} d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" />
+        </>
+      )}
+      {/* Placeholder icon — DebugScreen is a temporary dev tool, no polish intended. */}
+      {name === "debug" && (
+        <>
+          <Circle cx={12} cy={12} r={8} stroke={color} strokeWidth={1.75} fill="none" />
+          <Path {...common} d="M12 8v4l3 2" />
         </>
       )}
     </Svg>

@@ -6,6 +6,7 @@ import { colors, fontFamily } from "../theme";
 import { HomeScreen } from "../screens/home/HomeScreen";
 import { DeviceScreen } from "../screens/device/DeviceScreen";
 import { GuardiansScreen } from "../screens/guardians/GuardiansScreen";
+import { DebugScreen } from "../screens/debug/DebugScreen";
 import { ProfileNavigator } from "./ProfileNavigator";
 import { AppTabParamList } from "./types";
 
@@ -16,6 +17,7 @@ const LABELS: Record<keyof AppTabParamList, string> = {
   Device: "DEVICE",
   Guardians: "GUARDIANS",
   Profile: "PROFILE",
+  Debug: "DEBUG",
 };
 
 const ICONS: Record<keyof AppTabParamList, TabBarIconName> = {
@@ -23,6 +25,7 @@ const ICONS: Record<keyof AppTabParamList, TabBarIconName> = {
   Device: "device",
   Guardians: "guardians",
   Profile: "profile",
+  Debug: "debug",
 };
 
 export function AppTabs() {
@@ -45,6 +48,7 @@ export function AppTabs() {
       <Tab.Screen name="Device" component={DeviceScreen} />
       <Tab.Screen name="Guardians" component={GuardiansScreen} />
       <Tab.Screen name="Profile" component={ProfileNavigator} />
+      <Tab.Screen name="Debug" component={DebugScreen} />
     </Tab.Navigator>
   );
 }

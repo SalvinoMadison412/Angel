@@ -22,6 +22,8 @@ export type AppTabParamList = {
   Device: undefined;
   Guardians: undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
+  // TEMP DEV TOOL — see screens/debug/DebugScreen.tsx.
+  Debug: undefined;
 };
 
 export type RootStackParamList = {
