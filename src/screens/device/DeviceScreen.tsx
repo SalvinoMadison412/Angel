@@ -17,9 +17,11 @@ const BLE_STATE_LABEL: Record<string, string> = {
 export function DeviceScreen() {
   const navigation = useNavigation<AppTabNavigation<"Device">>();
   const { data: device, saveBikeInfo } = useDevice();
-  const { connectionState, pairedDevice, fault } = useCrashDetector();
+  const { connectionState, isLinked, isReconnecting, pairedDevice, fault } = useCrashDetector();
 
-  const bleConnected = connectionState === "connected";
+  // Debounced (see useCrashDetector) so a sub-2s reconnect blip doesn't
+  // flip this card's status/label/button between connected and not.
+  const bleStatusLabel = isReconnecting ? "RECONNECTING…" : BLE_STATE_LABEL[connectionState];
 
   const [bikeMake, setBikeMake] = useState("");
   const [bikeModel, setBikeModel] = useState("");
@@ -53,14 +55,14 @@ export function DeviceScreen() {
       <GlassCard>
         <Text style={[type.kicker, styles.dim]}>BLUETOOTH</Text>
         <View style={styles.statusRow}>
-          <Text style={[type.title, styles.statusText]}>{BLE_STATE_LABEL[connectionState]}</Text>
-          <Tag label={bleConnected ? "READY" : "ACTION NEEDED"} variant={bleConnected ? "accent" : "neutral"} />
+          <Text style={[type.title, styles.statusText]}>{bleStatusLabel}</Text>
+          <Tag label={isLinked ? "READY" : "ACTION NEEDED"} variant={isLinked ? "accent" : "neutral"} />
         </View>
-        {bleConnected && pairedDevice && (
+        {isLinked && pairedDevice && (
           <Text style={[type.bodySmall, styles.dim, styles.pairedName]}>{pairedDevice.name}</Text>
         )}
         <PillButton
-          title={bleConnected ? "MANAGE DEVICE" : "PAIR DEVICE"}
+          title={isLinked ? "MANAGE DEVICE" : "PAIR DEVICE"}
           variant="outline"
           onPress={() => navigation.navigate("DeviceSetup")}
           style={styles.pairButton}

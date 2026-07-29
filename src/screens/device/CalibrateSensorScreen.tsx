@@ -37,7 +37,10 @@ export function CalibrateSensorScreen() {
   const navigation = useNavigation<RootStackNavigation>();
   const route = useRoute<RouteProp<RootStackParamList, "CalibrateSensor">>();
   const mandatory = route.params?.mandatory ?? false;
-  const { connectionState, calibrate, calibrationConfirmation } = useCrashDetector();
+  // `isLinked` is debounced (see useCrashDetector) so a sub-2s reconnect
+  // blip doesn't yank this screen's UI or fail an in-progress attempt —
+  // only a drop that outlasts the grace window counts as really gone.
+  const { isLinked, calibrate, calibrationConfirmation } = useCrashDetector();
   const { data: device, ensureDevice, setCalibrated } = useDevice();
 
   const [status, setStatus] = useState<Status>("idle");
@@ -46,10 +49,17 @@ export function CalibrateSensorScreen() {
   // confirmation left over from an earlier attempt (or from before this
   // screen even mounted) isn't mistaken for this one's result.
   const waitStartedAtRef = useRef<number | null>(null);
+  // Reentrancy guard — belt-and-suspenders alongside the button only ever
+  // being rendered outside "calibrating": a double-tap on the same gesture
+  // can fire before React commits the status change that hides it.
+  const inFlightRef = useRef(false);
 
   const isRecalibration = Boolean(device?.calibrated);
-  const connected = connectionState === "connected";
   const canLeave = !mandatory || status === "error";
+
+  useEffect(() => {
+    if (status !== "calibrating") inFlightRef.current = false;
+  }, [status]);
 
   useEffect(() => {
     if (canLeave) return;
@@ -88,14 +98,18 @@ export function CalibrateSensorScreen() {
     return () => clearTimeout(timer);
   }, [status]);
 
-  // No point waiting out the full timeout if the link itself already died.
+  // No point waiting out the full timeout if the link itself already died —
+  // but only once a drop is confirmed past the debounce grace window, not
+  // on every momentary blip (that's the whole point of `isLinked`).
   useEffect(() => {
-    if (status !== "calibrating" || connected) return;
+    if (status !== "calibrating" || isLinked) return;
     setStatus("error");
     setErrorMessage("Connection to the sensor was lost before calibration finished. Reconnect and try again.");
-  }, [status, connected]);
+  }, [status, isLinked]);
 
   const handleCalibrate = async () => {
+    if (inFlightRef.current) return; // already calibrating — ignore a stray double-tap
+    inFlightRef.current = true;
     setStatus("calibrating");
     setErrorMessage(null);
     waitStartedAtRef.current = Date.now();
@@ -129,7 +143,7 @@ export function CalibrateSensorScreen() {
         </GlassCard>
       )}
 
-      {!connected && status !== "success" && (
+      {!isLinked && status !== "success" && (
         <GlassCard accentBorder>
           <Text style={[type.body, styles.copy]}>
             The sensor isn't connected right now. Reconnect it before calibrating — the calibration write needs an
@@ -154,7 +168,7 @@ export function CalibrateSensorScreen() {
             )}
           </GlassCard>
 
-          <PillButton title="CALIBRATE" onPress={handleCalibrate} disabled={!connected} style={styles.cta} />
+          <PillButton title="CALIBRATE" onPress={handleCalibrate} disabled={!isLinked} style={styles.cta} />
           {canLeave && <PillButton title="SKIP FOR NOW" variant="ghost" onPress={() => navigation.goBack()} />}
         </>
       )}
@@ -188,7 +202,7 @@ export function CalibrateSensorScreen() {
             <Text style={[type.kicker, styles.errorLabel]}>CALIBRATION FAILED</Text>
             <Text style={[type.body, styles.copy]}>{errorMessage}</Text>
           </GlassCard>
-          <PillButton title="RETRY" onPress={handleCalibrate} disabled={!connected} style={styles.cta} />
+          <PillButton title="RETRY" onPress={handleCalibrate} disabled={!isLinked} style={styles.cta} />
           <PillButton title="SKIP FOR NOW" variant="ghost" onPress={() => navigation.goBack()} />
         </>
       )}

@@ -29,15 +29,17 @@ export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: guardians } = useGuardians();
   const { data: subscription } = useCurrentSubscription();
-  const { connectionState, lastEvent } = useCrashDetector();
+  const { isLinked, isReconnecting, lastEvent } = useCrashDetector();
   const { simulateCrash, simulateFault, clearSimulatedFault } = useCrashDetector({ mock: true });
 
   // Driven by the live BLE connection state, not the device row's persisted
   // `pairing_status` — that flag reflects setup history and goes stale the
   // moment the sensor actually disconnects, which is exactly the bug this
-  // badge exists to avoid.
-  const isConnected = connectionState === "connected";
+  // badge exists to avoid. `isLinked` is debounced (see useCrashDetector)
+  // so a sub-2s reconnect blip doesn't flash this whole badge off and on.
   const leanDeg = lastEvent && lastEvent.calibrated ? lastEvent.tilt / 4 : 0;
+  const connectionLabel = isReconnecting ? "RECONNECTING…" : isLinked ? "DEVICE CONNECTED" : "DEVICE NOT CONNECTED";
+  const sensorLabel = isReconnecting ? "RECONNECTING…" : isLinked ? "SENSOR OK" : "SENSOR OFFLINE";
 
   // Feeds the mock BLE stream rather than writing an incident directly —
   // this exercises the exact same app-root listener → CrashAlertScreen →
@@ -53,9 +55,9 @@ export function HomeScreen() {
     <ScreenBackground scroll contentStyle={styles.content}>
       <View style={styles.headerRow}>
         <Text style={[type.wordmark, styles.wordmark]}>ANGEL</Text>
-        <View style={[styles.statusPill, isConnected ? styles.statusPillOn : styles.statusPillOff]}>
-          <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.textDim }]} />
-          <Text style={[type.kicker, styles.statusText]}>{isConnected ? "DEVICE CONNECTED" : "DEVICE NOT CONNECTED"}</Text>
+        <View style={[styles.statusPill, isLinked ? styles.statusPillOn : styles.statusPillOff]}>
+          <View style={[styles.statusDot, { backgroundColor: isLinked ? colors.success : colors.textDim }]} />
+          <Text style={[type.kicker, styles.statusText]}>{connectionLabel}</Text>
         </View>
       </View>
 
@@ -74,9 +76,7 @@ export function HomeScreen() {
       <GlassCard style={styles.telemetryCard} padded={false}>
         <View style={styles.telemetryHeader}>
           <Text style={[type.kicker, styles.dimText]}>LIGHT-CYCLE // TELEMETRY</Text>
-          <Text style={[type.kicker, isConnected ? styles.sensorOk : styles.dimText]}>
-            {isConnected ? "SENSOR OK" : "SENSOR OFFLINE"}
-          </Text>
+          <Text style={[type.kicker, isLinked ? styles.sensorOk : styles.dimText]}>{sensorLabel}</Text>
         </View>
         <View style={styles.motifWrap}>
           <HoloMotorcycle leanDeg={leanDeg} />
@@ -86,12 +86,12 @@ export function HomeScreen() {
       <GlassCard style={styles.readingCard}>
         <Text style={[type.kicker, styles.dimText]}>LAST READING</Text>
         {!lastEvent ? (
-          isConnected ? (
+          isLinked ? (
             <>
-              <Text style={styles.emptyReading}>No incidents recorded yet</Text>
+              <Text style={styles.emptyReading}>Waiting for an event</Text>
               <Text style={styles.emptyReadingHint}>
-                This updates automatically the moment the sensor detects a hard impact or a tip-over — nothing to
-                do here until then.
+                No incidents recorded yet — this updates automatically the moment the sensor detects a hard impact
+                or a tip-over.
               </Text>
             </>
           ) : (
