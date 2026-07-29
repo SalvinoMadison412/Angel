@@ -21,6 +21,11 @@ const PAIRED_DEVICE_KEY = "crashDetectorPairedDevice";
 const SCAN_TIMEOUT_MS = 15000;
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const CALIBRATE_TIMEOUT_MS = 5000;
+// Android defaults to a 23-byte ATT MTU (20 usable bytes) unless the
+// central explicitly negotiates a larger one — nowhere near enough for our
+// JSON payloads (calibration_complete alone is 49 characters). Requested at
+// connect time; not guaranteed, but 247 is a widely-supported target.
+const REQUESTED_MTU = 247;
 // Value is arbitrary — the device only cares that a write happened.
 const CALIBRATE_TRIGGER_BYTE = "\x01";
 
@@ -305,7 +310,21 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     try {
       bleOpLog(`GATT connectToDevice(${deviceId}) — issuing`);
       let device = await this.manager.connectToDevice(deviceId, { autoConnect: false });
-      bleOpLog(`GATT connectToDevice(${deviceId}) — resolved`);
+      bleOpLog(`GATT connectToDevice(${deviceId}) — resolved, mtu=${device.mtu} (default, not yet negotiated)`);
+
+      // A separate step, not a connectToDevice() option — passing
+      // requestMTU as a connection option made connectToDevice() itself
+      // hang for ~30s and then fail with "Operation was cancelled" on this
+      // device/library combination. Requested MTU isn't guaranteed to be
+      // granted, so a failure here just means we stay at the default —
+      // it must never take the connection down with it.
+      try {
+        bleOpLog(`GATT requestMTU(${deviceId}, ${REQUESTED_MTU}) — issuing`);
+        device = await device.requestMTU(REQUESTED_MTU);
+        bleOpLog(`GATT requestMTU(${deviceId}) — resolved, mtu=${device.mtu}`);
+      } catch (err) {
+        bleOpLog(`GATT requestMTU(${deviceId}) — FAILED, continuing at mtu=${device.mtu}:`, err instanceof Error ? err.message : err);
+      }
 
       bleOpLog(`GATT discoverAllServicesAndCharacteristics(${deviceId}) — issuing`);
       device = await device.discoverAllServicesAndCharacteristics();
