@@ -1,9 +1,9 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, StyleSheet, Text } from "react-native";
+import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
 import { useCrashDetector, useDevice } from "../../hooks";
-import { colors, spacing, type } from "../../theme";
+import { colors, radius, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 
 type Status = "idle" | "calibrating" | "success" | "error";
@@ -12,6 +12,16 @@ type Status = "idle" | "calibrating" | "success" | "error";
 // successful calibrate() write before giving up — BLE notifications can
 // occasionally be missed, so this must not wait forever.
 const CONFIRMATION_TIMEOUT_MS = 5000;
+
+// Mirrors the firmware's own sample collection window (CALIBRATION_SAMPLE_COUNT
+// x CALIBRATION_SAMPLE_INTERVAL_MS in CrashDetector.ino) — drives the progress
+// bar's fill rate so it reads as "almost done" right as the real
+// calibration_complete notification is expected, not before. Capped below
+// 100% (see PROGRESS_CAP) since the notification, not the clock, is the
+// actual completion signal.
+const CALIBRATION_EXPECTED_MS = 1000;
+const PROGRESS_CAP = 0.95;
+const PROGRESS_TICK_MS = 50;
 
 // TEMP DIAGNOSTIC LOGGING — see crashDetectorBle.ts's bleOpLog for why.
 function calibrateLog(...args: unknown[]) {
@@ -50,6 +60,11 @@ export function CalibrateSensorScreen() {
 
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Live progress through the ~1s on-device sample collection window, for
+  // the progress bar below — see CALIBRATION_EXPECTED_MS. Purely cosmetic:
+  // calibrationConfirmation above is still the only thing that actually
+  // resolves "calibrating" to success or failure.
+  const [progress, setProgress] = useState(0);
   // Marks when the current attempt started waiting for a confirmation, so a
   // confirmation left over from an earlier attempt (or from before this
   // screen even mounted) isn't mistaken for this one's result.
@@ -64,6 +79,25 @@ export function CalibrateSensorScreen() {
 
   useEffect(() => {
     if (status !== "calibrating") inFlightRef.current = false;
+  }, [status]);
+
+  // Drives the progress bar off elapsed wall-clock time against the
+  // firmware's own expected collection window, capped below 100% — the
+  // calibration_complete notification (handled separately above) is what
+  // actually ends the wait, this is just a visual sense of "almost there."
+  useEffect(() => {
+    if (status !== "calibrating") {
+      setProgress(0);
+      return;
+    }
+    const startedAt = waitStartedAtRef.current ?? Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - startedAt;
+      setProgress(Math.min(elapsed / CALIBRATION_EXPECTED_MS, PROGRESS_CAP));
+    };
+    tick();
+    const interval = setInterval(tick, PROGRESS_TICK_MS);
+    return () => clearInterval(interval);
   }, [status]);
 
   useEffect(() => {
@@ -189,6 +223,8 @@ export function CalibrateSensorScreen() {
             )}
           </GlassCard>
 
+          <Text style={[type.body, styles.instruction]}>Keep the bike upright and stationary. Do not move it.</Text>
+
           <PillButton title="CALIBRATE" onPress={handleCalibrate} disabled={!isLinked} style={styles.cta} />
           {canLeave && <PillButton title="SKIP FOR NOW" variant="ghost" onPress={() => navigation.goBack()} />}
         </>
@@ -196,11 +232,14 @@ export function CalibrateSensorScreen() {
 
       {status === "calibrating" && (
         <GlassCard style={styles.centeredCard}>
-          <ActivityIndicator color={colors.accent} />
           <Text style={[type.title, styles.holdStill]}>Hold still…</Text>
           <Text style={[type.bodySmall, styles.dim, styles.centeredText]}>
             The sensor is averaging samples — keep the bike upright and don't touch it for a second.
           </Text>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+          <Text style={[type.bodySmall, styles.dim, styles.progressLabel]}>{Math.round(progress * 100)}%</Text>
         </GlassCard>
       )}
 
@@ -240,7 +279,22 @@ const styles = StyleSheet.create({
   cta: { marginTop: spacing.sm },
   centeredCard: { alignItems: "center", paddingVertical: spacing.xxl },
   centeredText: { textAlign: "center", marginTop: spacing.sm },
-  holdStill: { color: colors.text, marginTop: spacing.lg },
+  holdStill: { color: colors.text },
+  instruction: { color: colors.accent, textAlign: "center" },
+  progressTrack: {
+    width: "100%",
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glassFillRaised,
+    marginTop: spacing.xl,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+  },
+  progressLabel: { marginTop: spacing.sm },
   checkmark: { color: colors.success, fontSize: 40, fontFamily: type.display.fontFamily },
   successText: { color: colors.success, marginTop: spacing.md },
   errorLabel: { color: colors.danger },

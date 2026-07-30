@@ -73,6 +73,13 @@ const unsigned long CALIBRATION_TIMEOUT_MS = 3000;
 const unsigned long TELEMETRY_INTERVAL_MS = 100;
 
 float refX = 0, refY = 0, refZ = ACCEL_LSB_PER_G;
+// Per-axis gyro zero-rate offset (raw LSB counts, same units as the gyro
+// readings they're subtracted from) and the impact-magnitude stillness
+// baseline (g's, same units as impactG) — both captured alongside the tilt
+// reference during the same calibration pass. See the calibration-complete
+// branch in loop() and saveCalibration() below.
+float gyroOffX = 0, gyroOffY = 0, gyroOffZ = 0;
+float impactBaseline = 0;
 bool calibrated = false;
 
 bool calibrating = false;
@@ -80,6 +87,11 @@ unsigned long calibrationStartedMs = 0;
 unsigned long lastCalibrationSampleMs = 0;
 int calibrationSamplesTaken = 0;
 double calibrationSumX = 0, calibrationSumY = 0, calibrationSumZ = 0;
+double calibrationSumGX = 0, calibrationSumGY = 0, calibrationSumGZ = 0;
+// Online mean/variance accumulators for the impact-magnitude baseline —
+// avoids storing all 50 samples just to compute a standard deviation
+// afterward (var = sumSq/n - mean^2).
+double calibrationSumImpactG = 0, calibrationSumImpactG2 = 0;
 
 unsigned long lastTelemetryMs = 0;
 float lastMagG = 0;
@@ -93,22 +105,36 @@ bool faultReported = false;
 bool sensorOk = true;
 
 void loadCalibration() {
-  prefs.begin("crash", true);
-  calibrated = prefs.getBool("cal", false);
-  refX = prefs.getFloat("refX", 0);
-  refY = prefs.getFloat("refY", 0);
-  refZ = prefs.getFloat("refZ", ACCEL_LSB_PER_G);
+  prefs.begin("angel", true);
+  calibrated = prefs.getBool("calibrated", false);
+  refX = prefs.getFloat("ref_ax", 0);
+  refY = prefs.getFloat("ref_ay", 0);
+  refZ = prefs.getFloat("ref_az", ACCEL_LSB_PER_G);
+  gyroOffX = prefs.getFloat("gyro_ox", 0);
+  gyroOffY = prefs.getFloat("gyro_oy", 0);
+  gyroOffZ = prefs.getFloat("gyro_oz", 0);
+  impactBaseline = prefs.getFloat("impact_base", 0);
   prefs.end();
 }
 
-void saveCalibration(float x, float y, float z) {
-  prefs.begin("crash", false);
-  prefs.putBool("cal", true);
-  prefs.putFloat("refX", x);
-  prefs.putFloat("refY", y);
-  prefs.putFloat("refZ", z);
+// Persists all three calibration baselines captured by one calibration pass
+// — tilt reference, gyro zero-rate offset, and impact stillness baseline.
+// A bike's mount only gets one calibration event, so these are always
+// computed and stored together, never independently.
+void saveCalibration(float ax, float ay, float az, float gox, float goy, float goz, float impactBase) {
+  prefs.begin("angel", false);
+  prefs.putBool("calibrated", true);
+  prefs.putFloat("ref_ax", ax);
+  prefs.putFloat("ref_ay", ay);
+  prefs.putFloat("ref_az", az);
+  prefs.putFloat("gyro_ox", gox);
+  prefs.putFloat("gyro_oy", goy);
+  prefs.putFloat("gyro_oz", goz);
+  prefs.putFloat("impact_base", impactBase);
   prefs.end();
-  refX = x; refY = y; refZ = z;
+  refX = ax; refY = ay; refZ = az;
+  gyroOffX = gox; gyroOffY = goy; gyroOffZ = goz;
+  impactBaseline = impactBase;
   calibrated = true;
   Serial.println("Calibration saved.");
 }
@@ -140,6 +166,11 @@ void startCalibration() {
   calibrationSumX = 0;
   calibrationSumY = 0;
   calibrationSumZ = 0;
+  calibrationSumGX = 0;
+  calibrationSumGY = 0;
+  calibrationSumGZ = 0;
+  calibrationSumImpactG = 0;
+  calibrationSumImpactG2 = 0;
 }
 
 void onCalibrateWrite(BLEDevice central, BLECharacteristic characteristic) {
@@ -258,13 +289,30 @@ void loop() {
       calibrationSumX += ax;
       calibrationSumY += ay;
       calibrationSumZ += az;
+      calibrationSumGX += gx;
+      calibrationSumGY += gy;
+      calibrationSumGZ += gz;
+      // Raw (uncorrected) impact magnitude for this sample — the stillness
+      // baseline has to be computed from what the sensor actually reports
+      // at rest, not from an already-corrected value.
+      float sampleImpactG = sqrt(ax * ax + ay * ay + az * az) / ACCEL_LSB_PER_G;
+      calibrationSumImpactG += sampleImpactG;
+      calibrationSumImpactG2 += sampleImpactG * sampleImpactG;
       calibrationSamplesTaken++;
       if (calibrationSamplesTaken >= CALIBRATION_SAMPLE_COUNT) {
         calibrating = false;
+        double n = calibrationSamplesTaken;
+        double meanImpactG = calibrationSumImpactG / n;
+        double varImpactG = (calibrationSumImpactG2 / n) - (meanImpactG * meanImpactG);
+        float impactBase = sqrt(varImpactG > 0 ? varImpactG : 0);
         saveCalibration(
-          calibrationSumX / calibrationSamplesTaken,
-          calibrationSumY / calibrationSamplesTaken,
-          calibrationSumZ / calibrationSamplesTaken
+          calibrationSumX / n,
+          calibrationSumY / n,
+          calibrationSumZ / n,
+          calibrationSumGX / n,
+          calibrationSumGY / n,
+          calibrationSumGZ / n,
+          impactBase
         );
         sendCalibrationComplete(true);
       }
@@ -275,9 +323,20 @@ void loop() {
     }
   }
 
+  // Gyro zero-rate offset correction — subtract the per-axis stillness
+  // offset captured during calibration before computing magnitude, so
+  // sensor-specific drift doesn't show up as phantom rotation.
+  float gxCorrected = gx - gyroOffX;
+  float gyCorrected = gy - gyroOffY;
+  float gzCorrected = gz - gyroOffZ;
+
   float impactMagRaw = sqrt(ax*ax + ay*ay + az*az);
-  float gyroMagRaw   = sqrt(gx*gx + gy*gy + gz*gz);
-  float impactG = impactMagRaw / ACCEL_LSB_PER_G;
+  float gyroMagRaw   = sqrt(gxCorrected*gxCorrected + gyCorrected*gyCorrected + gzCorrected*gzCorrected);
+  float impactGRaw = impactMagRaw / ACCEL_LSB_PER_G;
+  // Impact stillness baseline correction — mounting-surface vibration noise
+  // captured during calibration sets the effective zero; severity scoring
+  // and telemetry both use this corrected value from here on.
+  float impactG = max(0.0f, impactGRaw - impactBaseline);
   float gyroDps = gyroMagRaw / GYRO_LSB_PER_DPS;
 
   float refMag = sqrt(refX*refX + refY*refY + refZ*refZ);
@@ -305,41 +364,48 @@ void loop() {
     sendTelemetry(impactG, gyroDps, tilt, isStill);
   }
 
-  // Path 1: impact-triggered (existing behavior)
-  if (impactG > IMPACT_LOW_G && !wasImpact) {
-    wasImpact = true;
-    impactTime = millis();
-    Serial.println(">>> IMPACT DETECTED! Calculating severity...");
-  }
-  if (wasImpact && millis() - impactTime > 2000) {
-    int score = 0;
-    if (impactG > IMPACT_HIGH_G) score += 2; else if (impactG > IMPACT_LOW_G) score += 1;
-    if (gyroDps > GYRO_HIGH_DPS) score += 2; else if (gyroDps > GYRO_LOW_DPS) score += 1;
-    if (tilt > TILT_HIGH_DEG) score += 1;
-    if (isStill) score += 1;
-    sendReport("crash", "impact", severityFromScore(score), impactG, gyroDps, tilt, isStill);
-    wasImpact = false;
-    stillSince = 0;
-    extremeTiltSince = 0;
-    tiltIncidentReported = false;
-  }
-
-  // Path 2: sustained extreme tilt with no qualifying impact.
-  // Catches slow tip-overs and a sensor dislodged/thrown that lands
-  // at an implausible angle.
-  if (!wasImpact) {
-    if (tilt > TILT_EXTREME_DEG) {
-      if (extremeTiltSince == 0) extremeTiltSince = millis();
-      if (!tiltIncidentReported && millis() - extremeTiltSince > EXTREME_TILT_HOLD_MS) {
-        int score = 1;
-        if (gyroDps > GYRO_HIGH_DPS) score += 2; else if (gyroDps > GYRO_LOW_DPS) score += 1;
-        if (isStill) score += 1;
-        sendReport("crash", "tilt", severityFromScore(score), impactG, gyroDps, tilt, isStill);
-        tiltIncidentReported = true;
-      }
-    } else {
+  // Both crash-alert paths below require a completed calibration — without
+  // it there's no gyro offset, impact baseline, or tilt reference for this
+  // specific mount, so a "detection" would just be noise. Telemetry above
+  // still streams either way (with calibrated:false) so the app can prompt
+  // for calibration; only alert-firing is gated.
+  if (calibrated) {
+    // Path 1: impact-triggered (existing behavior)
+    if (impactG > IMPACT_LOW_G && !wasImpact) {
+      wasImpact = true;
+      impactTime = millis();
+      Serial.println(">>> IMPACT DETECTED! Calculating severity...");
+    }
+    if (wasImpact && millis() - impactTime > 2000) {
+      int score = 0;
+      if (impactG > IMPACT_HIGH_G) score += 2; else if (impactG > IMPACT_LOW_G) score += 1;
+      if (gyroDps > GYRO_HIGH_DPS) score += 2; else if (gyroDps > GYRO_LOW_DPS) score += 1;
+      if (tilt > TILT_HIGH_DEG) score += 1;
+      if (isStill) score += 1;
+      sendReport("crash", "impact", severityFromScore(score), impactG, gyroDps, tilt, isStill);
+      wasImpact = false;
+      stillSince = 0;
       extremeTiltSince = 0;
       tiltIncidentReported = false;
+    }
+
+    // Path 2: sustained extreme tilt with no qualifying impact.
+    // Catches slow tip-overs and a sensor dislodged/thrown that lands
+    // at an implausible angle.
+    if (!wasImpact) {
+      if (tilt > TILT_EXTREME_DEG) {
+        if (extremeTiltSince == 0) extremeTiltSince = millis();
+        if (!tiltIncidentReported && millis() - extremeTiltSince > EXTREME_TILT_HOLD_MS) {
+          int score = 1;
+          if (gyroDps > GYRO_HIGH_DPS) score += 2; else if (gyroDps > GYRO_LOW_DPS) score += 1;
+          if (isStill) score += 1;
+          sendReport("crash", "tilt", severityFromScore(score), impactG, gyroDps, tilt, isStill);
+          tiltIncidentReported = true;
+        }
+      } else {
+        extremeTiltSince = 0;
+        tiltIncidentReported = false;
+      }
     }
   }
 
