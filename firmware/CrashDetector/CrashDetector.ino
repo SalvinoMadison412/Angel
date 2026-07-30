@@ -204,7 +204,8 @@ void sendReport(const char* type, const char* trigger, int severity,
 // Sent at TELEMETRY_INTERVAL_MS — the live stream the app's Home screen
 // cards render continuously. No `trigger`/`severity`: those only mean
 // something for a detected "crash" event, not an arbitrary instantaneous
-// reading.
+// reading. Includes `calibrating` (distinct from `calibrated`) so the app
+// can reflect an in-progress recalibration in the UI if it wants to.
 void sendTelemetry(float impactG, float gyroDps, float tilt, bool isStill) {
   String json = "{";
   json += "\"type\":\"telemetry\",";
@@ -212,7 +213,8 @@ void sendTelemetry(float impactG, float gyroDps, float tilt, bool isStill) {
   json += "\"gyro_dps\":" + String(gyroDps, 1) + ",";
   json += "\"tilt\":" + String(tilt, 1) + ",";
   json += "\"still\":" + String(isStill ? "true" : "false") + ",";
-  json += "\"calibrated\":" + String(calibrated ? "true" : "false");
+  json += "\"calibrated\":" + String(calibrated ? "true" : "false") + ",";
+  json += "\"calibrating\":" + String(calibrating ? "true" : "false");
   json += "}";
   crashChar.writeValue(json);
 }
@@ -363,6 +365,17 @@ void loop() {
     lastTelemetryMs = millis();
     sendTelemetry(impactG, gyroDps, tilt, isStill);
   }
+
+  // A calibration in progress (including a recalibration of an already-
+  // calibrated device) must never score or fire a crash alert — the bike
+  // gets deliberately tilted/handled during calibration, and without this
+  // guard that reads as a real event against the *old* (about to be
+  // replaced) reference. Telemetry above still streams either way (with
+  // calibrating:true) so the app can reflect it; only alert-firing is
+  // muted, and only for this loop iteration — the trailing delay(10)
+  // below is skipped too, which is harmless (millis()-based sampling
+  // upstream doesn't depend on it).
+  if (calibrating) return;
 
   // Both crash-alert paths below require a completed calibration — without
   // it there's no gyro offset, impact baseline, or tilt reference for this
