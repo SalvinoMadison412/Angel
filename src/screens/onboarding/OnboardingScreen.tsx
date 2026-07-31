@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
@@ -6,6 +7,12 @@ import { useDevice, useEmergencyProfile, useGuardians, useProfile } from "../../
 import { requestCrashNotificationPermission } from "../../services/notifications";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
+
+// Local-only — not a Supabase column, since existing tables can't be
+// altered for this. Nothing reads this yet; it's captured so it's available
+// later without re-prompting, same reasoning as the permission request
+// itself (see advanceTo below).
+const LOCATION_PERMISSION_STATUS_KEY = "onboardingLocationPermissionStatus";
 
 const TOTAL_STEPS = 4;
 const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -53,7 +60,8 @@ export function OnboardingScreen() {
       // emergency pipeline re-requests at alert time as a fallback (see
       // captureCurrentLocation in emergencyPipeline.ts).
       try {
-        await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        await SecureStore.setItemAsync(LOCATION_PERMISSION_STATUS_KEY, status);
       } catch (err) {
         console.warn("[onboarding] failed to request location permission", err);
       }

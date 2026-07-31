@@ -13,6 +13,7 @@ import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
 import { EmergencyCountdownScreen } from "../screens/crash/EmergencyCountdownScreen";
 import { EmergencyAlertSentScreen } from "../screens/crash/EmergencyAlertSentScreen";
 import { LiveIncidentScreen } from "../screens/incident/LiveIncidentScreen";
+import { ActiveTicketScreen } from "../screens/incident/ActiveTicketScreen";
 import { GuardianFormScreen } from "../screens/guardians/GuardianFormScreen";
 import { DiagnosticScreen } from "../screens/debug/DiagnosticScreen";
 import { RootStackNavigation, RootStackParamList } from "./types";
@@ -151,6 +152,7 @@ function AppNavigator() {
         />
         <Stack.Screen name="EmergencyAlertSent" component={EmergencyAlertSentScreen} />
         <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
+        <Stack.Screen name="ActiveTicket" component={ActiveTicketScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
         <Stack.Screen name="Diagnostic" component={DiagnosticScreen} />
       </Stack.Navigator>

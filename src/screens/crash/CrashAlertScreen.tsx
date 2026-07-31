@@ -1,4 +1,5 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import * as Location from "expo-location";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,6 +9,7 @@ import { responderTypesForSeverity } from "../../hooks/useResponders";
 import { cancelCrashEvent, confirmIncident } from "../../services/emergency";
 import { notificationService } from "../../services/notifications";
 import { etaMinutes, haversineKm } from "../../lib/geo";
+import { supabase } from "../../lib/supabase";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 import { initialsFor } from "../../hooks/useGuardians";
@@ -32,6 +34,60 @@ export function CrashAlertScreen() {
   const [secondsLeft, setSecondsLeft] = useState(() => remainingCountdownSeconds(receivedAt, totalSeconds));
   const [resolving, setResolving] = useState(false);
   const resolvedRef = useRef(false);
+
+  // Angel Partners platform — a crash_tickets row is created the moment the
+  // countdown starts (not at dispatch), so nearby Partners can see and
+  // start responding to an open ticket during the countdown window itself,
+  // not only after it expires. Kept as a promise (not a plain id) so
+  // handleCancel can await it regardless of whether the insert has already
+  // resolved by the time the rider taps cancel. Resolves to null — rather
+  // than throwing — on any failure (missing session, denied location,
+  // network error): a crash alert must never be blocked or stalled by this.
+  const ticketPromiseRef = useRef<Promise<string | null> | null>(null);
+
+  useEffect(() => {
+    if (ticketPromiseRef.current) return;
+    ticketPromiseRef.current = (async (): Promise<string | null> => {
+      if (!session?.user.id || severity < 2) return null;
+
+      let riderLat: number | null = null;
+      let riderLng: number | null = null;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const position = await Location.getCurrentPositionAsync({});
+          riderLat = position.coords.latitude;
+          riderLng = position.coords.longitude;
+        }
+      } catch (err) {
+        console.warn("[crash-ticket] failed to capture location", err);
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("crash_tickets")
+          .insert({
+            rider_id: session.user.id,
+            severity,
+            trigger,
+            impact_g: impactG,
+            gyro_dps: gyroDps,
+            tilt_deg: tilt,
+            rider_lat: riderLat,
+            rider_lng: riderLng,
+            status: "open",
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        return data.id as string;
+      } catch (err) {
+        console.warn("[crash-ticket] failed to create ticket", err);
+        return null;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const detectedAt = useMemo(
     () => new Date(receivedAt).toLocaleTimeString("en-IN", { hour12: false }),
@@ -94,6 +150,16 @@ export function CrashAlertScreen() {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
     await cancelCrashEvent(event);
+
+    const ticketId = await ticketPromiseRef.current;
+    if (ticketId) {
+      const { error } = await supabase
+        .from("crash_tickets")
+        .update({ status: "closed", closed_at: new Date().toISOString() })
+        .eq("id", ticketId);
+      if (error) console.warn("[crash-ticket] failed to close ticket on cancel", error);
+    }
+
     navigation.goBack();
   };
 

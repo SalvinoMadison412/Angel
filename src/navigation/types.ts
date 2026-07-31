@@ -33,6 +33,10 @@ export type RootStackParamList = {
   CalibrateSensor: { mandatory?: boolean } | undefined;
   CrashAlert: CrashEvent & { totalSeconds: number };
   LiveIncident: { incidentId: string };
+  // The Angel Partners real-time ticket status screen — see
+  // ActiveTicketScreen.tsx. Not yet navigated to from anywhere (CrashAlertScreen
+  // still goes to LiveIncident); wiring that up is a later prompt.
+  ActiveTicket: { ticketId: string };
   // Severity-1 events only — see shouldTriggerAlert in emergencyPipeline.ts.
   EmergencyCountdown: CrashEvent;
   EmergencyAlertSent: { guardianNames: string[] };
