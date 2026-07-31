@@ -100,9 +100,8 @@ function usePartner(partnerId: string | null | undefined) {
 /**
  * Shown to the rider once a severity 2-5 crash ticket exists — real-time
  * status via Supabase (no polling/refresh needed), a map, and a way to call
- * either the accepted partner or emergency services directly. Not yet
- * reachable from CrashAlertScreen (which still navigates to the existing
- * mock-responder LiveIncidentScreen) — wiring that up is a later prompt.
+ * either the accepted partner or emergency services directly. Reached from
+ * CrashAlertScreen.dispatch() once the crash_tickets insert succeeds.
  */
 export function ActiveTicketScreen() {
   const navigation = useNavigation<RootStackNavigation>();

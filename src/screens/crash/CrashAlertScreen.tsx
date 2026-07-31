@@ -126,7 +126,16 @@ export function CrashAlertScreen() {
       );
     }
 
-    navigation.replace("LiveIncident", { incidentId: incident.id });
+    // Route to the real Angel Partners ticket-tracking screen when the
+    // crash_tickets insert (kicked off on mount) succeeded; fall back to the
+    // mock-responder LiveIncidentScreen only if it failed, so a dispatch is
+    // never left with nowhere to go.
+    const ticketId = await ticketPromiseRef.current;
+    if (ticketId) {
+      navigation.replace("ActiveTicket", { ticketId });
+    } else {
+      navigation.replace("LiveIncident", { incidentId: incident.id });
+    }
   };
 
   useEffect(() => {
