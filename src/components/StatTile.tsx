@@ -51,7 +51,7 @@ export function StatTile({ label, value, unit, caption, empty }: Props) {
           </>
         )}
         {caption ? (
-          <Text style={[type.label, styles.caption]} numberOfLines={1}>
+          <Text style={[type.label, styles.caption]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
             {caption}
           </Text>
         ) : null}
