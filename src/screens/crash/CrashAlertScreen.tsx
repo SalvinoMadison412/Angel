@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
 import { useAssignResponder, useAuth, useDevice, useGuardians, useResponders } from "../../hooks";
 import { responderTypesForSeverity } from "../../hooks/useResponders";
-import { cancelCrashEvent, confirmIncident } from "../../services/emergency";
+import { cancelCrashEvent, confirmIncident, queuePendingDispatch } from "../../services/emergency";
 import { notificationService } from "../../services/notifications";
 import { etaMinutes, haversineKm } from "../../lib/geo";
 import { supabase } from "../../lib/supabase";
@@ -33,6 +33,7 @@ export function CrashAlertScreen() {
 
   const [secondsLeft, setSecondsLeft] = useState(() => remainingCountdownSeconds(receivedAt, totalSeconds));
   const [resolving, setResolving] = useState(false);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const resolvedRef = useRef(false);
 
   // Angel Partners platform — a crash_tickets row is created the moment the
@@ -98,6 +99,7 @@ export function CrashAlertScreen() {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
     setResolving(true);
+    setDispatchError(null);
 
     if (!session?.user.id) {
       // Shouldn't happen — this screen only exists behind an authenticated
@@ -107,12 +109,32 @@ export function CrashAlertScreen() {
       return;
     }
 
-    const incident = await confirmIncident({
-      event,
-      userId: session.user.id,
-      deviceId: device?.id ?? null,
-      guardians: guardians ?? [],
-    });
+    // confirmIncident only throws on its `incidents` insert itself failing
+    // (e.g. no connectivity) — everything past that point inside it is
+    // already best-effort. Without this try/catch, that throw used to leave
+    // the rider stranded here indefinitely: `resolving` stays true forever,
+    // both buttons stay disabled, no incident/ticket exists, nothing is
+    // queued. Now it queues the dispatch for automatic background retry
+    // (see offlineQueue.ts) and re-arms the buttons so the rider isn't
+    // stuck waiting on a screen that can't move forward on its own.
+    let incident;
+    try {
+      incident = await confirmIncident({
+        event,
+        userId: session.user.id,
+        deviceId: device?.id ?? null,
+        guardians: guardians ?? [],
+      });
+    } catch (err) {
+      console.warn("[crash-ticket] dispatch failed, queuing for retry", err);
+      queuePendingDispatch({ event, userId: session.user.id, deviceId: device?.id ?? null });
+      setDispatchError(
+        "Couldn't reach the server to finish dispatching — this will keep retrying automatically. Try again now if you have signal."
+      );
+      setResolving(false);
+      resolvedRef.current = false;
+      return;
+    }
 
     const nearest = (responders ?? [])
       .map((r) => ({ r, distanceKm: haversineKm({ lat: incident.lat ?? 0, lng: incident.lng ?? 0 }, { lat: r.lat, lng: r.lng }) }))
@@ -228,9 +250,16 @@ export function CrashAlertScreen() {
           )}
         </View>
 
+        {dispatchError && <Text style={[type.bodySmall, styles.dispatchError]}>{dispatchError}</Text>}
+
         <View style={styles.actions}>
           <PillButton title="I'M OK — CANCEL ALERT" variant="inverse" onPress={handleCancel} disabled={resolving} />
-          <PillButton title="SEND HELP NOW" variant="outline" onPress={dispatch} loading={resolving} />
+          <PillButton
+            title={dispatchError ? "TRY AGAIN" : "SEND HELP NOW"}
+            variant="outline"
+            onPress={dispatch}
+            loading={resolving}
+          />
         </View>
       </ScreenBackground>
     </View>
@@ -270,6 +299,7 @@ const styles = StyleSheet.create({
   caveat: { color: colors.textDim, marginTop: spacing.sm },
   countdownWrap: { marginTop: spacing.lg },
   copy: { color: colors.textMuted, textAlign: "center", paddingHorizontal: spacing.lg },
+  dispatchError: { color: "#FFB020", textAlign: "center", paddingHorizontal: spacing.lg },
   chipRow: { flexDirection: "row", gap: spacing.sm },
   extraChip: {
     width: 40,

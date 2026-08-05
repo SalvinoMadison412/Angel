@@ -53,7 +53,9 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withReleaseSigning.js",
+      "./plugins/withoutSystemAlertWindow.js"
     ]
   }
 }

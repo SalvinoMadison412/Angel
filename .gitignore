@@ -40,3 +40,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# release signing — never commit; back this up somewhere safe outside git
+/keystores/

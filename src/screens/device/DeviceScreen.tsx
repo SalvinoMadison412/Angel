@@ -133,19 +133,23 @@ export function DeviceScreen() {
         </Text>
       </GlassCard>
 
-      {/* TEMP DEBUG — remove once the calibration_complete investigation is resolved. */}
-      <GlassCard style={styles.debugCard}>
-        <Text style={[type.kicker, styles.dim]}>TEMP · DEBUG</Text>
-        <Text style={[type.bodySmall, styles.hint]}>
-          Raw values received from the device over BLE, live — to confirm whether data is actually reaching the app.
-        </Text>
-        <PillButton
-          title="VIEW RAW BLE DATA"
-          variant="outline"
-          onPress={() => navigation.navigate("Diagnostic")}
-          style={styles.pairButton}
-        />
-      </GlassCard>
+      {/* TEMP DEBUG — remove once the calibration_complete investigation is resolved.
+          Gated behind __DEV__ so this never ships reachable in a production build
+          (Play Store first-submission prep) while staying available for dev builds. */}
+      {__DEV__ && (
+        <GlassCard style={styles.debugCard}>
+          <Text style={[type.kicker, styles.dim]}>TEMP · DEBUG</Text>
+          <Text style={[type.bodySmall, styles.hint]}>
+            Raw values received from the device over BLE, live — to confirm whether data is actually reaching the app.
+          </Text>
+          <PillButton
+            title="VIEW RAW BLE DATA"
+            variant="outline"
+            onPress={() => navigation.navigate("Diagnostic")}
+            style={styles.pairButton}
+          />
+        </GlassCard>
+      )}
     </ScreenBackground>
   );
 }

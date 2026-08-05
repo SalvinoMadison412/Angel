@@ -28,12 +28,20 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+type NotifyReason = "missed_checkin" | "confirmed_crash";
+
 interface NotifyGuardiansBody {
   rider_id: string;
   severity: number;
   timestamp: string;
   lat: number | null;
   lng: number | null;
+  // Which alert path triggered this — changes the SMS copy below.
+  // "missed_checkin": severity-1 countdown expired with no rider response.
+  // "confirmed_crash": severity 2-5, already dispatched to a responder.
+  // Defaults to "missed_checkin" so existing callers (severity-1 path,
+  // shipped before this field existed) keep their exact original copy.
+  reason?: NotifyReason;
 }
 
 function isValidBody(value: unknown): value is NotifyGuardiansBody {
@@ -48,7 +56,8 @@ function isValidBody(value: unknown): value is NotifyGuardiansBody {
     typeof v.timestamp === "string" &&
     !Number.isNaN(new Date(v.timestamp).getTime()) &&
     (v.lat === null || typeof v.lat === "number") &&
-    (v.lng === null || typeof v.lng === "number")
+    (v.lng === null || typeof v.lng === "number") &&
+    (v.reason === undefined || v.reason === "missed_checkin" || v.reason === "confirmed_crash")
   );
 }
 
@@ -119,9 +128,13 @@ Deno.serve(async (req) => {
         ? `https://www.google.com/maps?q=${body.lat},${body.lng}`
         : "location unavailable";
 
+    const reason = body.reason ?? "missed_checkin";
     const message =
-      `Angel emergency alert: ${riderName} may have been in a crash (severity ${body.severity}/5) ` +
-      `at ${when} and did not respond to a 30-second check-in. Last known location: ${mapsLink}`;
+      reason === "confirmed_crash"
+        ? `Angel emergency alert: ${riderName} was in a crash (severity ${body.severity}/5) at ${when}. ` +
+          `A responder has been dispatched. Last known location: ${mapsLink}`
+        : `Angel emergency alert: ${riderName} may have been in a crash (severity ${body.severity}/5) ` +
+          `at ${when} and did not respond to a 30-second check-in. Last known location: ${mapsLink}`;
 
     const list = guardians ?? [];
     let sent = 0;

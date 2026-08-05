@@ -18,6 +18,35 @@ export function shouldTriggerAlert(event: CrashEvent): boolean {
   return event.severity >= 2;
 }
 
+type NotifyReason = "missed_checkin" | "confirmed_crash";
+
+// Shared call into the real notify-guardians edge function (Twilio SMS) —
+// both alert paths below go through this so severity 1 (missed check-in)
+// and severity 2-5 (confirmed crash) guardians get an actual text, not just
+// the in-app incident_events log. Best-effort by design: the caller decides
+// whether a failure here should block anything else.
+async function invokeNotifyGuardians(input: {
+  userId: string;
+  severity: number;
+  receivedAt: number;
+  lat: number | null;
+  lng: number | null;
+  reason: NotifyReason;
+}): Promise<{ sent: number }> {
+  const { data, error } = await supabase.functions.invoke("notify-guardians", {
+    body: {
+      rider_id: input.userId,
+      severity: input.severity,
+      timestamp: new Date(input.receivedAt).toISOString(),
+      lat: input.lat,
+      lng: input.lng,
+      reason: input.reason,
+    },
+  });
+  if (error) throw error;
+  return { sent: typeof data?.sent === "number" ? data.sent : 0 };
+}
+
 // Best-effort GPS capture shared by both alert paths below — never blocks
 // or throws past this function; a crash alert must still go out even if
 // location permission was denied or the fix times out.
@@ -116,6 +145,29 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
   }
 
   await notificationService.notifyGuardians(incident, guardians, medicalInfo);
+
+  // Confirmed severity 2-5 crashes must reach guardians by real SMS, not
+  // just the incident_events log above — that log only ever surfaces inside
+  // the app's own Live Incident screen, which a guardian has no reason to
+  // be looking at. Best-effort: a failure here must not undo the dispatch
+  // that already happened above.
+  if (guardians.length > 0) {
+    try {
+      const { sent } = await invokeNotifyGuardians({
+        userId,
+        severity: event.severity,
+        receivedAt: event.receivedAt,
+        lat,
+        lng,
+        reason: "confirmed_crash",
+      });
+      await notificationService.logEvent(incident.id, `SMS sent to ${sent}/${guardians.length} guardian(s)`);
+    } catch (err) {
+      console.warn("[emergency] failed to send guardian SMS for confirmed crash", err);
+      await notificationService.logEvent(incident.id, "Guardian SMS failed to send — will not retry automatically");
+    }
+  }
+
   return incident;
 }
 
@@ -146,16 +198,12 @@ export async function sendGuardianAlert({ event, userId }: SendGuardianAlertInpu
 
   const { lat, lng } = await captureCurrentLocation();
 
-  const { data, error } = await supabase.functions.invoke("notify-guardians", {
-    body: {
-      rider_id: userId,
-      severity: event.severity,
-      timestamp: new Date(event.receivedAt).toISOString(),
-      lat,
-      lng,
-    },
+  return invokeNotifyGuardians({
+    userId,
+    severity: event.severity,
+    receivedAt: event.receivedAt,
+    lat,
+    lng,
+    reason: "missed_checkin",
   });
-  if (error) throw error;
-
-  return { sent: typeof data?.sent === "number" ? data.sent : 0 };
 }

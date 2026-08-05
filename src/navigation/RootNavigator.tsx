@@ -22,7 +22,7 @@ import { useCrashDetector } from "../hooks/useCrashDetector";
 import { useDevice } from "../hooks/useDevice";
 import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
-import { DEFAULT_COUNTDOWN_SECONDS, shouldTriggerAlert } from "../services/emergency";
+import { DEFAULT_COUNTDOWN_SECONDS, flushPendingDispatches, shouldTriggerAlert } from "../services/emergency";
 import { crashEventFromNotificationResponse, presentCrashNotification } from "../services/notifications";
 import { colors } from "../theme";
 
@@ -75,6 +75,22 @@ function CrashDetectorListener() {
   const mock = useCrashDetector({ mock: true });
   const { data: device, setCalibrated } = useDevice();
   const handledReceivedAt = useRef<number | null>(null);
+
+  // A crash dispatch that failed outright while offline (see
+  // CrashAlertScreen's dispatch()) gets queued to disk rather than lost —
+  // this is where it actually gets retried: once on mount (covers a cold
+  // start after the failure) and again every time the app returns to the
+  // foreground, since that's the natural moment connectivity is most likely
+  // to have come back.
+  useEffect(() => {
+    flushPendingDispatches().catch((err) => console.warn("[offline-queue] flush on mount failed", err));
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        flushPendingDispatches().catch((err) => console.warn("[offline-queue] flush on foreground failed", err));
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const candidates = [real.lastEvent, mock.lastEvent].filter((e): e is CrashEvent => Boolean(e));

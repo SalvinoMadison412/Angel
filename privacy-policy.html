@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Angel — Privacy Policy</title>
+<style>
+  html { background: #ffffff; color-scheme: light; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 0 auto; padding: 48px 24px 96px; background: #ffffff; color: #1a1a1a; line-height: 1.6; }
+  h1 { font-size: 28px; margin-bottom: 4px; color: #1a1a1a; }
+  .updated { color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 40px; }
+  h2 { font-size: 18px; margin-top: 36px; color: #1a1a1a; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { text-align: left; border-bottom: 1px solid #e2e2e2; padding: 8px 12px 8px 0; }
+  th { color: #666; font-weight: 600; }
+  a { color: inherit; }
+  p, li { margin: 12px 0; }
+</style>
+</head>
+<body>
+<h1>Angel — Privacy Policy</h1>
+<div class="updated">Last updated: August 6, 2026</div>
+
+<p>Angel ("Angel", "we", "us") provides a two-wheeler crash-detection app that pairs with a wearable sensor, detects possible crashes, and alerts your emergency contacts and/or nearby responders. This policy explains what data Angel collects, why, and how it's handled.</p>
+
+<h2>Data we collect</h2>
+<p><strong>Account information.</strong> Your phone number (used to sign in via SMS one-time passcode) or, if you choose Google Sign-In, the name and email address Google provides.</p>
+<p><strong>Location.</strong> Foreground GPS location is captured at the moment a crash alert is triggered or confirmed, so it can be included in the alert sent to your guardians and/or a dispatched responder. We do not track or store your location at any other time.</p>
+<p><strong>Bluetooth / sensor data.</strong> Angel pairs with your Angel crash-sensor device over Bluetooth Low Energy. Impact force, rotation, tilt, and "stillness" readings from the sensor are used to detect and classify possible crashes, and to support cancelling a false alarm.</p>
+<p><strong>Emergency contacts ("guardians").</strong> Names and phone numbers you add are stored so Angel can text them if a crash alert isn't cancelled in time.</p>
+<p><strong>Emergency medical profile (optional).</strong> If you choose to provide it, your blood group and any medical conditions are stored so this information can be shared with a dispatched responder at the moment of a confirmed crash alert — never before, and never for any other purpose.</p>
+<p><strong>Crash and incident records.</strong> When a crash alert is triggered, we record the event (severity, sensor readings, location, timestamp) so it can be dispatched, tracked, and reviewed by you afterward in your incident history.</p>
+<p><strong>Device/bike info.</strong> Optional make/model you enter for your paired device, and sensor calibration offsets.</p>
+
+<h2>How we use this data</h2>
+<p>Angel uses the data above solely to:</p>
+<ul>
+  <li>Detect a possible crash and let you cancel a false alarm</li>
+  <li>Alert your guardians by SMS when a crash alert is confirmed or a check-in is missed</li>
+  <li>Dispatch a nearby trained responder for moderate-to-severe crashes, and give them your location and (if you've provided it) relevant medical information</li>
+  <li>Maintain your account and incident history</li>
+  <li>Diagnose and improve crash-detection accuracy</li>
+</ul>
+<p>We do not sell your data. We do not use your location, sensor, or medical data for advertising.</p>
+
+<h2>Third parties</h2>
+<p><strong>Supabase</strong> hosts our database, authentication, and backend functions. <strong>Twilio</strong> sends the SMS alerts to your guardians. <strong>Google</strong> provides optional Sign-In and, where used, map display. Each processes data only as needed to provide the functionality above, under their own security and privacy commitments.</p>
+
+<h2>Data retention &amp; deletion</h2>
+<p>Your account data, guardians, medical profile, and incident history are retained while your account is active. You can delete your account and associated data at any time by contacting us below; emergency medical information and guardian contact details are removed immediately on request.</p>
+
+<h2>Permissions this app requests, and why</h2>
+<table>
+  <tr><th>Permission</th><th>Why</th></tr>
+  <tr><td>Location (fine/coarse)</td><td>Attach your location to a crash alert so guardians/responders know where you are</td></tr>
+  <tr><td>Bluetooth (scan/connect)</td><td>Pair with and receive readings from your Angel crash sensor</td></tr>
+  <tr><td>Notifications</td><td>Alert you in the background if a crash is detected or a ticket status changes</td></tr>
+</table>
+<p>Angel does not request permissions beyond what's listed above, and does not access your contacts, photos, or other apps' data.</p>
+
+<h2>Children's privacy</h2>
+<p>Angel is not directed at children under 13, and we do not knowingly collect data from them.</p>
+
+<h2>Changes to this policy</h2>
+<p>We'll update the "Last updated" date above when this policy changes. Material changes will be communicated to the email or phone number on your account where possible.</p>
+
+<h2>Contact us</h2>
+<p>Questions about this policy or a request to access/delete your data: <a href="mailto:hello@angel.tech">hello@angel.tech</a></p>
+</body>
+</html>
