@@ -10,7 +10,7 @@ const team = [
     role: "Co-Founder",
     initials: "SKM",
     photoSrc: "/assets/salvino.jpg",
-    bio: "Salvino founded Angel after watching how little safety infrastructure exists for the millions of people who ride for a living. He sets the network's long-term vision and drives the partnerships — with emergency services, fleets, hospitals, and insurers — that turn that vision into a working system. His conviction is simple: no one should be alone in the moment they need help most.",
+    bio: "Salvino founded Angel after watching how little safety infrastructure exists for the millions of people who ride for a living. He spent two years as a Data Analyst at SNP Global, building the habit of making decisions from data, not instinct, while simultaneously running The Library Company's full marketing operation — proving he could turn strategy into execution. At Angel, he brings both disciplines together: the rigor to understand markets and the creativity to move them, driving the partnerships that turn the network's vision into a working system.",
   },
   {
     name: "Sherwin Judas Madison",
