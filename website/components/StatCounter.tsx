@@ -9,12 +9,14 @@ export default function StatCounter({
   prefix = "",
   decimals = 0,
   duration = 1400,
+  locale,
 }: {
   value: number;
   suffix?: string;
   prefix?: string;
   decimals?: number;
   duration?: number;
+  locale?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
@@ -37,10 +39,16 @@ export default function StatCounter({
     return () => cancelAnimationFrame(raf);
   }, [inView, value, duration]);
 
+  const formatted = locale
+    ? new Intl.NumberFormat(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(
+        display
+      )
+    : display.toFixed(decimals);
+
   return (
     <span ref={ref}>
       {prefix}
-      {display.toFixed(decimals)}
+      {formatted}
       {suffix}
     </span>
   );

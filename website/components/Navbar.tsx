@@ -7,10 +7,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import Logo from "./Logo";
 import Container from "./Container";
-import Button from "./Button";
+import RequestPitchDeckButton from "./RequestPitchDeckButton";
 
 const links = [
-  { href: "/", label: "Home" },
+  { href: "/#platform", label: "Platform" },
+  { href: "/network", label: "Network" },
   { href: "/product", label: "Product" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
@@ -41,7 +42,7 @@ export default function Navbar() {
       <Container className="flex h-[72px] items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5" aria-label="Angel home">
           <Logo className="h-7 w-7" />
-          <span className="font-heading text-[15px] font-bold tracking-widest2 text-white">ANGEL</span>
+          <span className="font-heading-mono text-[15px] font-bold tracking-widest2 text-white">ANGEL</span>
         </Link>
 
         <nav className="hidden items-center gap-9 md:flex">
@@ -59,9 +60,7 @@ export default function Navbar() {
         </nav>
 
         <div className="hidden md:block">
-          <Button href="/product" size="md">
-            Buy AGL v1
-          </Button>
+          <RequestPitchDeckButton size="md" />
         </div>
 
         <button
@@ -96,9 +95,7 @@ export default function Navbar() {
                 </Link>
               ))}
               <div className="pt-4">
-                <Button href="/product" className="w-full">
-                  Buy AGL v1
-                </Button>
+                <RequestPitchDeckButton className="w-full" />
               </div>
             </Container>
           </motion.div>

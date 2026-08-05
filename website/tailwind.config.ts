@@ -27,7 +27,8 @@ const config: Config = {
       },
       fontFamily: {
         mono: ["var(--font-jetbrains-mono)", "monospace"],
-        heading: ["var(--font-space-mono)", "monospace"],
+        heading: ["var(--font-dm-serif)", "serif"],
+        "heading-mono": ["var(--font-space-mono)", "monospace"],
         body: ["var(--font-inter)", "sans-serif"],
       },
       letterSpacing: {
@@ -42,9 +43,14 @@ const config: Config = {
           "0%": { transform: "translateX(0)" },
           "100%": { transform: "translateX(-50%)" },
         },
+        "glow-pulse": {
+          "0%, 100%": { boxShadow: "0 0 0 1px rgba(255,87,34,0.55), 0 0 12px 0 rgba(255,87,34,0.25)" },
+          "50%": { boxShadow: "0 0 0 1px rgba(255,87,34,0.85), 0 0 22px 4px rgba(255,87,34,0.45)" },
+        },
       },
       animation: {
         marquee: "marquee 30s linear infinite",
+        "glow-pulse": "glow-pulse 2.6s ease-in-out infinite",
       },
     },
   },

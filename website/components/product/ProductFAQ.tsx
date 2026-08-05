@@ -5,12 +5,12 @@ import Accordion from "../Accordion";
 
 const faqs = [
   {
-    q: "How does AGL v1 know the difference between a real crash and a pothole?",
-    a: "AGL v1 fuses accelerometer and gyroscope data through an onboard AI model trained on real-world collision datasets. It looks at impact force, deceleration rate, and orientation change together, not any single spike — so routine bumps don't trigger a false alarm.",
+    q: "How does Atom know the difference between a real crash and a pothole?",
+    a: "Atom fuses accelerometer and gyroscope data through an onboard AI model trained on real-world collision datasets. It looks at impact force, deceleration rate, and orientation change together, not any single spike — so routine bumps don't trigger a false alarm.",
   },
   {
-    q: "Does AGL v1 need my phone to work?",
-    a: "No. AGL v1 has its own 4G LTE connection and GPS, so it can detect a crash and send an alert independently of your phone's battery, signal, or proximity. Pairing it with the companion app adds real-time monitoring, but isn't required for core alerts.",
+    q: "Does Atom need my phone to work?",
+    a: "No. Atom has its own 4G LTE connection and GPS, so it can detect a crash and send an alert independently of your phone's battery, signal, or proximity. Pairing it with the companion app adds real-time monitoring, but isn't required for core alerts.",
   },
   {
     q: "Is there a monthly subscription fee?",
@@ -18,15 +18,15 @@ const faqs = [
   },
   {
     q: "How long does the battery last?",
-    a: "AGL v1 lasts up to 72 hours on standby from a single charge. It draws power over USB-C and is designed to sit mounted and topped up while your vehicle is running, so most owners never think about charging it separately.",
+    a: "Atom lasts up to 72 hours on standby from a single charge. It draws power over USB-C and is designed to sit mounted and topped up while your vehicle is running, so most owners never think about charging it separately.",
   },
   {
     q: "Can I cancel a false alarm?",
-    a: "Yes. When AGL v1 detects a possible crash, it starts a short countdown window before dispatching an alert, giving you time to confirm you're okay and cancel directly from the device or the companion app.",
+    a: "Yes. When Atom detects a possible crash, it starts a short countdown window before dispatching an alert, giving you time to confirm you're okay and cancel directly from the device or the companion app.",
   },
   {
     q: "What's the warranty and return policy?",
-    a: "Every AGL v1 ships with a 2-year manufacturer warranty covering hardware defects, plus a 30-day no-questions return window if it's not the right fit for you.",
+    a: "Every Atom ships with a 2-year manufacturer warranty covering hardware defects, plus a 30-day no-questions return window if it's not the right fit for you.",
   },
 ];
 

@@ -16,13 +16,13 @@ export default function PrivacyPage() {
 
         <div className="mt-12 space-y-8 font-body text-sm leading-relaxed text-ink-muted sm:text-base">
           <p>
-            Angel Technologies ("Angel", "we", "us") collects the minimum data necessary to operate AGL v1's crash
+            Angel Technologies ("Angel", "we", "us") collects the minimum data necessary to operate Atom's crash
             detection and emergency alerting functions: device telemetry (accelerometer, gyroscope, GPS), account
             information you provide (name, email, emergency contacts), and diagnostic data used to improve
             detection accuracy.
           </p>
           <p>
-            Location and impact data collected by AGL v1 is used exclusively to detect crashes, dispatch alerts to
+            Location and impact data collected by Atom is used exclusively to detect crashes, dispatch alerts to
             your designated emergency contacts and services, and improve our severity-classification models. We do
             not sell location or telemetry data to third parties.
           </p>

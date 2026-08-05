@@ -4,9 +4,9 @@ import Reveal from "../Reveal";
 
 const milestones = [
   { year: "2023", title: "Founded", body: "Angel is founded after a near-miss highlights the gap between vehicle safety and post-crash response." },
-  { year: "2024", title: "First Prototype", body: "AGL v1's sensor-fusion detection engine passes internal validation against a 2,000-collision dataset." },
+  { year: "2024", title: "First Prototype", body: "Atom's sensor-fusion detection engine passes internal validation against a 2,000-collision dataset." },
   { year: "2025", title: "Field Pilot", body: "500 devices deployed across pilot fleets in three countries, refining the AI severity model on real-world data." },
-  { year: "2026", title: "Public Launch", body: "AGL v1 ships to consumers and fleet operators globally, backed by CE, FCC, and RoHS certification." },
+  { year: "2026", title: "Public Launch", body: "Atom ships to consumers and fleet operators globally, backed by CE, FCC, and RoHS certification." },
 ];
 
 export default function Timeline() {

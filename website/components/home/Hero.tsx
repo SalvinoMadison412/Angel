@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { ChevronDown } from "lucide-react";
 import Container from "../Container";
 import Button from "../Button";
-import DeviceRender from "../DeviceRender";
+import NetworkDiagram from "../NetworkDiagram";
 
 export default function Hero() {
   return (
@@ -16,7 +17,7 @@ export default function Hero() {
       />
       <div className="pointer-events-none absolute -left-32 bottom-0 h-[420px] w-[420px] rounded-full bg-white/5 blur-[120px]" />
 
-      <Container className="relative grid grid-cols-1 items-center gap-16 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:py-0">
+      <Container className="relative grid grid-cols-1 items-center gap-16 py-24 lg:grid-cols-[1.05fr_0.95fr] lg:py-0">
         <div>
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -24,21 +25,17 @@ export default function Hero() {
             transition={{ duration: 0.5 }}
             className="mb-7 flex items-center gap-3 font-mono text-[11px] uppercase tracking-widest2 text-accent"
           >
-            <span className="h-px w-6 bg-accent" />
-            [ AGL v1 — CRASH DETECTION SYSTEM ]
+            <span className="h-px w-6 bg-accent" />[ 01 ] ROAD SAFETY INFRASTRUCTURE
           </motion.div>
 
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.08 }}
-            className="font-heading text-[42px] font-bold leading-[1.08] tracking-tight text-white sm:text-[56px] lg:text-[64px]"
+            className="font-heading text-[38px] font-bold leading-[1.1] tracking-tight text-white sm:text-[48px] lg:text-[56px]"
           >
-            Drive safer.
-            <br />
-            React faster.
-            <br />
-            <span className="text-gradient-accent">Survive anything.</span>
+            The Network That{" "}
+            <span className="text-gradient-accent">Responds Before Help Knows It's Needed.</span>
           </motion.h1>
 
           <motion.p
@@ -47,9 +44,8 @@ export default function Hero() {
             transition={{ duration: 0.6, delay: 0.16 }}
             className="mt-7 max-w-lg font-body text-base leading-relaxed text-ink-muted sm:text-lg"
           >
-            Angel builds AGL v1 — a crash detection device that senses impact in milliseconds and automatically
-            alerts emergency contacts and responders with your exact location, so help is already moving before
-            you can reach for your phone.
+            Every hour, 20 people die on Indian roads. 12 million gig workers ride with no safety net. Angel is
+            the network that connects them to help — automatically.
           </motion.p>
 
           <motion.div
@@ -58,11 +54,11 @@ export default function Hero() {
             transition={{ duration: 0.6, delay: 0.24 }}
             className="mt-10 flex flex-col gap-4 sm:flex-row"
           >
-            <Button href="/product" size="lg" icon>
-              Buy AGL v1
+            <Button href="/network" size="lg" icon>
+              Explore the Network
             </Button>
-            <Button href="#how-it-works" variant="secondary" size="lg">
-              Learn How It Works
+            <Button href="/product" variant="secondary" size="lg">
+              Buy Atom
             </Button>
           </motion.div>
 
@@ -70,29 +66,21 @@ export default function Hero() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.35 }}
-            className="mt-14 grid max-w-md grid-cols-3 gap-6 border-t border-divider pt-6"
+            className="mt-14 hidden items-center gap-2 font-mono text-[11px] uppercase tracking-widest2 text-ink-dim sm:flex"
           >
-            {[
-              ["< 100ms", "Detection"],
-              ["500K+", "Protected"],
-              ["99.98%", "Uptime"],
-            ].map(([stat, label]) => (
-              <div key={label}>
-                <div className="font-heading text-xl font-bold text-white sm:text-2xl">{stat}</div>
-                <div className="mt-1 font-mono text-[10px] uppercase tracking-widest2 text-ink-dim">{label}</div>
-              </div>
-            ))}
+            <ChevronDown size={14} className="animate-bounce text-accent" />
+            Scroll to explore the platform
           </motion.div>
         </div>
 
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
+          initial={{ opacity: 0, scale: 0.94 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="relative mx-auto w-full max-w-md"
+          className="relative mx-auto w-full max-w-lg"
         >
-          <div className="bracket-corner border border-glass bg-glass-fill p-10">
-            <DeviceRender className="w-full drop-shadow-2xl" />
+          <div className="bracket-corner border border-glass bg-glass-fill p-6">
+            <NetworkDiagram variant="compact" className="w-full" />
           </div>
         </motion.div>
       </Container>

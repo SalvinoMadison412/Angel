@@ -5,11 +5,11 @@ import Container from "./Container";
 
 const columns = [
   {
-    title: "Product",
+    title: "Platform",
     links: [
-      { href: "/product", label: "AGL v1" },
+      { href: "/network", label: "Network" },
+      { href: "/product", label: "Atom" },
       { href: "/product#specs", label: "Tech Specs" },
-      { href: "/product#faq", label: "FAQ" },
     ],
   },
   {
@@ -17,6 +17,7 @@ const columns = [
     links: [
       { href: "/about", label: "About" },
       { href: "/about#investors", label: "Investors" },
+      { href: "/network#partners", label: "Partners" },
       { href: "/contact", label: "Contact" },
     ],
   },
@@ -38,11 +39,11 @@ export default function Footer() {
           <div>
             <Link href="/" className="flex items-center gap-2.5">
               <Logo className="h-7 w-7" />
-              <span className="font-heading text-[15px] font-bold tracking-widest2 text-white">ANGEL</span>
+              <span className="font-heading-mono text-[15px] font-bold tracking-widest2 text-white">ANGEL</span>
             </Link>
             <p className="mt-4 max-w-xs font-body text-sm leading-relaxed text-ink-muted">
-              Crash detection technology built to respond faster than you can. Every second counts — Angel makes
-              sure none are wasted.
+              The infrastructure layer for road safety — a two-sided network connecting drivers with the
+              responders, fleets, and hospitals that reach them.
             </p>
             <div className="mt-6 flex items-center gap-4">
               {[Twitter, Linkedin, Instagram].map((Icon, i) => (

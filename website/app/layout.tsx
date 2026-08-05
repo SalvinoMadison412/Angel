@@ -1,13 +1,22 @@
 import type { Metadata } from "next";
-import { Space_Mono, JetBrains_Mono, Inter } from "next/font/google";
+import { Space_Mono, JetBrains_Mono, Inter, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import PitchDeckModal from "@/components/PitchDeckModal";
+import { PitchDeckModalProvider } from "@/lib/PitchDeckModalContext";
 
 const spaceMono = Space_Mono({
   subsets: ["latin"],
   weight: ["400", "700"],
   variable: "--font-space-mono",
+  display: "swap",
+});
+
+const dmSerifDisplay = DM_Serif_Display({
+  subsets: ["latin"],
+  weight: ["400"],
+  variable: "--font-dm-serif",
   display: "swap",
 });
 
@@ -26,25 +35,38 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Angel — Drive Safer. React Faster. Survive Anything.",
+  title: "Angel — The Network That Responds Before Help Knows It's Needed",
   description:
-    "Angel builds AGL v1, an intelligent crash detection device that senses impact in milliseconds, alerts emergency contacts automatically, and dispatches help with your exact location.",
-  keywords: ["Angel", "AGL v1", "crash detection", "car safety device", "automatic SOS", "emergency alert"],
+    "Angel is the infrastructure layer for road safety — a two-sided network connecting drivers in distress with emergency responders, repair fleets, hospitals, and insurers in real time.",
+  keywords: [
+    "Angel",
+    "Atom",
+    "road safety network",
+    "crash detection",
+    "emergency response infrastructure",
+    "two-sided marketplace",
+  ],
   openGraph: {
-    title: "Angel — Drive Safer. React Faster. Survive Anything.",
+    title: "Angel — The Network That Responds Before Help Knows It's Needed",
     description:
-      "AGL v1 detects crashes in under 100ms and automatically alerts emergency contacts with your live location.",
+      "A real-time network connecting drivers, emergency responders, repair fleets, hospitals, and insurers — automatically.",
     type: "website",
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${spaceMono.variable} ${jetbrainsMono.variable} ${inter.variable}`}>
+    <html
+      lang="en"
+      className={`${spaceMono.variable} ${jetbrainsMono.variable} ${inter.variable} ${dmSerifDisplay.variable}`}
+    >
       <body className="font-body bg-bg text-ink antialiased">
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
+        <PitchDeckModalProvider>
+          <Navbar />
+          <main>{children}</main>
+          <Footer />
+          <PitchDeckModal />
+        </PitchDeckModalProvider>
       </body>
     </html>
   );

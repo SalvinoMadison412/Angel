@@ -3,26 +3,24 @@ import SectionLabel from "../SectionLabel";
 import Reveal from "../Reveal";
 
 const specs = [
-  ["Connectivity", "4G LTE / Wi-Fi / Bluetooth 5.2"],
-  ["Sensors", "6-axis IMU, barometer, GPS"],
-  ["Battery", "1500mAh, USB-C charging"],
-  ["Detection Speed", "In active benchmarking"],
-  ["Operating Temp", "-20°C to 60°C"],
-  ["Dimensions", "65mm × 35mm × 12mm"],
-  ["Weight", "48g"],
-  ["Certifications", "CE, FCC, RoHS"],
+  ["Real-time event processing", "Benchmarking in progress"],
+  ["AI crash severity model", "Trained on 2M+ incident records"],
+  ["Uptime SLA", "To be published"],
+  ["Data sovereignty", "GDPR compliant, regional data residency"],
+  ["API availability", "Partner API — latency benchmarks in progress"],
+  ["Coverage", "4G LTE / 5G / Wi-Fi fallback"],
 ];
 
-export default function SpecsTable() {
+export default function TechInfrastructure() {
   return (
-    <section id="specs" className="border-b border-divider bg-bg-elevated py-28">
+    <section className="border-b border-divider bg-bg-elevated py-28">
       <Container>
         <Reveal>
-          <SectionLabel index="SPECS">Technical Datasheet</SectionLabel>
+          <SectionLabel index="STACK">Technical Infrastructure</SectionLabel>
         </Reveal>
         <Reveal delay={0.05}>
           <h2 className="mt-5 max-w-2xl font-heading text-3xl font-bold leading-tight text-white sm:text-4xl">
-            Engineered down to the millimeter.
+            Built cloud-native. Built AI-first.
           </h2>
         </Reveal>
 

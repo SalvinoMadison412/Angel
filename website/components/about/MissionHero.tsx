@@ -11,7 +11,7 @@ export default function MissionHero() {
         </Reveal>
         <Reveal delay={0.05}>
           <h1 className="mt-6 max-w-3xl font-heading text-4xl font-bold leading-[1.1] text-white sm:text-5xl lg:text-6xl">
-            The seconds after a crash decide everything. We built Angel to never waste one.
+            We're not building a safety product. We're building the infrastructure layer beneath it.
           </h1>
         </Reveal>
         <Reveal delay={0.1}>
@@ -24,8 +24,8 @@ export default function MissionHero() {
             </p>
             <p>
               We're a team of hardware engineers, safety researchers, and former emergency dispatch operators
-              building the layer that should have existed all along — a device that notices the crash, understands
-              how serious it is, and gets help moving before you even know you need it.
+              building the network that should have existed all along — one where drivers, responders, tow
+              fleets, hospitals, and insurers are already connected before a crash ever happens.
             </p>
           </div>
         </Reveal>

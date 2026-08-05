@@ -8,7 +8,7 @@ export default function BuyCTA() {
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/15 blur-[140px]" />
       <Container className="relative flex flex-col items-center gap-8 text-center">
         <Reveal>
-          <span className="font-mono text-[11px] uppercase tracking-widest2 text-accent">[ AGL v1 — $199 ]</span>
+          <span className="font-mono text-[11px] uppercase tracking-widest2 text-accent">[ Atom — $199 ]</span>
         </Reveal>
         <Reveal delay={0.05}>
           <h2 className="max-w-lg font-heading text-3xl font-bold leading-tight text-white sm:text-4xl">
@@ -16,7 +16,7 @@ export default function BuyCTA() {
           </h2>
         </Reveal>
         <Reveal delay={0.1}>
-          <Button href="mailto:orders@angel.tech?subject=AGL%20v1%20Order" size="lg" icon>
+          <Button href="mailto:orders@angel.tech?subject=Atom%20Order" size="lg" icon>
             Add to Cart
           </Button>
         </Reveal>

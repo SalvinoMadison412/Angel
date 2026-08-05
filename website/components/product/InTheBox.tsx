@@ -4,7 +4,7 @@ import SectionLabel from "../SectionLabel";
 import Reveal from "../Reveal";
 
 const items = [
-  { icon: Cpu, label: "AGL v1 Device" },
+  { icon: Cpu, label: "Atom Device" },
   { icon: Cable, label: "USB-C Charging Cable" },
   { icon: Compass, label: "Windshield Mount" },
   { icon: BookOpen, label: "Quick Start Guide" },

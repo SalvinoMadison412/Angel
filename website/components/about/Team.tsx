@@ -1,22 +1,22 @@
 import Container from "../Container";
 import SectionLabel from "../SectionLabel";
 import Reveal from "../Reveal";
+import FounderAvatar from "./FounderAvatar";
 
+// TODO: add Sherwin's bio
 const team = [
   {
-    name: "Elena Vasquez",
-    role: "Chief Executive Officer",
-    bio: "Former product lead at a Tier-1 automotive safety supplier. Spent a decade shipping airbag control systems before deciding the next leap in crash safety would live outside the vehicle, not inside it.",
+    name: "Salvino Kevin Madison",
+    role: "Co-Founder",
+    initials: "SKM",
+    photoSrc: "/assets/salvino.jpg",
+    bio: "Salvino founded Angel after watching how little safety infrastructure exists for the millions of people who ride for a living. He sets the network's long-term vision and drives the partnerships — with emergency services, fleets, hospitals, and insurers — that turn that vision into a working system. His conviction is simple: no one should be alone in the moment they need help most.",
   },
   {
-    name: "Marcus Webb",
-    role: "Chief Technology Officer",
-    bio: "Embedded systems engineer with a background in aerospace telemetry. Built the sensor-fusion architecture that lets AGL v1 tell a pothole from a collision in under 100ms.",
-  },
-  {
-    name: "Dr. Amara Osei",
-    role: "Head of Safety",
-    bio: "Trauma physician turned safety researcher. Leads Angel's clinical partnerships and makes sure every severity model is validated against real collision outcomes, not assumptions.",
+    name: "Sherwin Judas Madison",
+    role: "Co-Founder & CFO",
+    initials: "SJM",
+    bio: null,
   },
 ];
 
@@ -25,31 +25,34 @@ export default function Team() {
     <section className="border-b border-divider bg-bg-elevated py-28">
       <Container>
         <Reveal>
-          <SectionLabel index="TEAM">Who's Building This</SectionLabel>
+          <SectionLabel index="TEAM">Founders</SectionLabel>
         </Reveal>
         <Reveal delay={0.05}>
           <h2 className="mt-5 max-w-2xl font-heading text-3xl font-bold leading-tight text-white sm:text-4xl">
-            Engineers, clinicians, and operators who've seen the gap firsthand.
+            Built by operators who refused to look away from the gap.
           </h2>
         </Reveal>
 
-        <div className="mt-16 grid grid-cols-1 gap-px overflow-hidden border border-glass bg-divider md:grid-cols-3">
+        <div className="mt-16 grid grid-cols-1 gap-6 md:grid-cols-2">
           {team.map((member, i) => (
             <Reveal key={member.name} delay={i * 0.08}>
-              <div className="h-full bg-bg-elevated p-8">
-                <div className="bracket-corner flex aspect-square items-center justify-center border border-glass bg-glass-fill">
-                  <span className="font-heading text-3xl font-bold text-ink-dim">
-                    {member.name
-                      .split(" ")
-                      .map((w) => w[0])
-                      .join("")}
-                  </span>
-                </div>
-                <h3 className="mt-6 font-heading text-lg font-bold text-white">{member.name}</h3>
-                <div className="mt-1 font-mono text-[11px] uppercase tracking-widest2 text-accent">
+              <div className="group relative h-full overflow-hidden rounded-sm border border-glass bg-gradient-to-b from-glass-fill-raised to-transparent p-9 shadow-[0_8px_30px_rgba(0,0,0,0.3)] transition-all duration-300 hover:-translate-y-1 hover:border-accent-border hover:shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
+                <div
+                  className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-accent/10 blur-[80px] transition-opacity duration-300 group-hover:opacity-100"
+                  aria-hidden
+                />
+                <FounderAvatar name={member.name} initials={member.initials} photoSrc={member.photoSrc} />
+                <h3 className="relative mt-7 font-heading text-2xl text-white">{member.name}</h3>
+                <div className="relative mt-1.5 font-mono text-[11px] uppercase tracking-widest2 text-accent">
                   {member.role}
                 </div>
-                <p className="mt-4 font-body text-sm leading-relaxed text-ink-muted">{member.bio}</p>
+                {member.bio ? (
+                  <p className="relative mt-4 font-body text-[15px] leading-[1.7] text-ink-muted">{member.bio}</p>
+                ) : (
+                  <p className="relative mt-4 font-body text-[15px] italic leading-[1.7] text-ink-dim">
+                    Bio coming soon.
+                  </p>
+                )}
               </div>
             </Reveal>
           ))}

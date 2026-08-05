@@ -16,7 +16,7 @@ export default function TermsPage() {
 
         <div className="mt-12 space-y-8 font-body text-sm leading-relaxed text-ink-muted sm:text-base">
           <p>
-            By purchasing or using AGL v1 and the Angel companion app, you agree to these terms. AGL v1 is designed
+            By purchasing or using Atom and the Angel companion app, you agree to these terms. Atom is designed
             to assist in detecting and responding to vehicle collisions, but it is not a substitute for safe
             driving practices, seatbelt use, or existing vehicle safety systems.
           </p>

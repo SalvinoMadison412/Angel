@@ -48,7 +48,7 @@ export default function ProductHero() {
             transition={{ duration: 0.5, delay: 0.08 }}
             className="mt-6 font-heading text-5xl font-bold text-white sm:text-6xl"
           >
-            AGL v1
+            Atom
           </motion.h1>
 
           <motion.p
@@ -57,7 +57,17 @@ export default function ProductHero() {
             transition={{ duration: 0.5, delay: 0.14 }}
             className="mt-3 font-heading text-lg text-ink-muted sm:text-xl"
           >
-            The World's Most Intelligent Crash Detector
+            The Hardware That Joins You to the Network
+          </motion.p>
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.18 }}
+            className="mt-5 max-w-md font-body text-sm leading-relaxed text-ink-muted sm:text-base"
+          >
+            Atom is not just a crash detector — it's your entry point into the Angel safety network. One
+            purchase connects you to every responder, tow fleet, and hospital already on the platform.
           </motion.p>
 
           <motion.div
