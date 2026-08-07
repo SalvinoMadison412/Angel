@@ -1,0 +1,17 @@
+-- notify_guardians_on_crash was a trigger on crash_tickets INSERT calling
+-- the notify-guardians edge function via supabase_functions.http_request —
+-- added directly against the database at some point, never tracked in a
+-- migration file here, and not referenced anywhere in the app or the
+-- function's own header comment (which only documents the two real call
+-- sites: EmergencyCountdownScreen and confirmIncident in
+-- emergencyPipeline.ts).
+--
+-- It called the function with a hardcoded service-role JWT and a literal
+-- empty '{}' body, but notify-guardians authenticates callers as a rider's
+-- own user session (authClient.auth.getUser(token), then checks
+-- body.rider_id === that user's id) and validates the body against
+-- NotifyGuardiansBody — so this trigger could never succeed. It only ever
+-- produced a fire-and-forget 500 server-side on every severity 2+ crash
+-- ticket, duplicate to and redundant with the app's own working direct
+-- calls.
+drop trigger if exists notify_guardians_on_crash on public.crash_tickets;
