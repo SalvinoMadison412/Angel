@@ -48,6 +48,20 @@ interface NotifyGuardiansBody {
   reason?: NotifyReason;
 }
 
+// Defensive normalization, not the source of truth — GuardianFormScreen and
+// OnboardingScreen's ContactsStep both now store guardians.phone in full
+// E.164 (+91XXXXXXXXXX), but this covers rows written before that fix
+// shipped (previously a free-text field with no country-code handling) so
+// a stale bare-digits number doesn't fail the Twilio call outright.
+// Assumes a 10-digit Indian mobile number, matching every phone field in
+// this app.
+function toE164(phone: string): string {
+  const trimmed = phone.trim();
+  if (trimmed.startsWith("+")) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  return `+91${digits}`;
+}
+
 function isValidBody(value: unknown): value is NotifyGuardiansBody {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
@@ -148,7 +162,7 @@ Deno.serve(async (req) => {
       list.map(async (guardian) => {
         try {
           const form = new URLSearchParams({
-            To: `whatsapp:${guardian.phone}`,
+            To: `whatsapp:${toE164(guardian.phone)}`,
             From: `whatsapp:${twilioFrom}`,
             Body: message,
           });

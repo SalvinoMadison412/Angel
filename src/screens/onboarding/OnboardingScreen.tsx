@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
 import { useDevice, useEmergencyProfile, useGuardians, useProfile } from "../../hooks";
+import { localDigits, toE164 } from "../../lib/phone";
 import { requestCrashNotificationPermission } from "../../services/notifications";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
@@ -290,13 +291,13 @@ function ContactsStep({
 
   const existing = guardians.data ?? [];
   const canAddMore = existing.length < MAX_CONTACTS;
-  const canAdd = canAddMore && name.trim().length > 0 && phone.trim().length >= 10;
+  const canAdd = canAddMore && name.trim().length > 0 && phone.length === 10;
 
   const handleAdd = async () => {
     if (!canAdd) return;
     await guardians.addGuardian.mutateAsync({
       name: name.trim(),
-      phone: phone.trim(),
+      phone: toE164(phone),
       relationship: "",
       alertMode: "call",
     });
@@ -345,15 +346,21 @@ function ContactsStep({
             style={[styles.input, styles.fieldSpacing]}
             underlineColorAndroid="transparent"
           />
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+91 98450 11204"
-            placeholderTextColor={colors.textDim}
-            keyboardType="phone-pad"
-            style={styles.input}
-            underlineColorAndroid="transparent"
-          />
+          <View style={styles.phoneRow}>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeText}>+91</Text>
+            </View>
+            <TextInput
+              value={phone}
+              onChangeText={(v) => setPhone(localDigits(v))}
+              placeholder="98450 11204"
+              placeholderTextColor={colors.textDim}
+              keyboardType="phone-pad"
+              maxLength={10}
+              style={[styles.input, styles.phoneInput]}
+              underlineColorAndroid="transparent"
+            />
+          </View>
           <PillButton
             title="+ ADD CONTACT"
             variant="outline"
@@ -462,6 +469,16 @@ const styles = StyleSheet.create({
   },
   multilineInput: { minHeight: 96 },
   fieldSpacing: { marginBottom: spacing.lg },
+  phoneRow: { flexDirection: "row", gap: spacing.md },
+  codeBox: {
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glassFillRaised,
+  },
+  codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
+  phoneInput: { flex: 1, letterSpacing: 2 },
   dobRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
   dobInput: { flex: 1, marginTop: 0, textAlign: "center" },
   dobInputYear: { flex: 1.6, marginTop: 0, textAlign: "center" },

@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
 import { useGuardians } from "../../hooks/useGuardians";
+import { localDigits, toE164 } from "../../lib/phone";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 
@@ -20,18 +21,18 @@ export function GuardianFormScreen() {
   const existing = useMemo(() => guardians?.find((g) => g.id === guardianId), [guardians, guardianId]);
 
   const [name, setName] = useState(existing?.name ?? "");
-  const [phone, setPhone] = useState(existing?.phone ?? "");
+  const [phone, setPhone] = useState(localDigits(existing?.phone ?? ""));
   const [relationship, setRelationship] = useState(existing?.relationship ?? "");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const canSave = name.trim().length > 0 && phone.trim().length >= 10;
+  const canSave = name.trim().length > 0 && phone.length === 10;
 
   const handleSave = async () => {
     if (!canSave) return;
     setSaveError(null);
     const input = {
       name: name.trim(),
-      phone: phone.trim(),
+      phone: toE164(phone),
       relationship: relationship.trim(),
       alertMode: existing?.alert_mode ?? DEFAULT_ALERT_MODE,
     };
@@ -65,13 +66,26 @@ export function GuardianFormScreen() {
       <View style={styles.body}>
         <GlassCard>
           <Field label="FULL NAME" value={name} onChangeText={setName} placeholder="Anita Sharma" />
-          <Field
-            label="PHONE"
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+91 98450 11204"
-            keyboardType="phone-pad"
-          />
+
+          <View style={styles.fieldSpacing}>
+            <Text style={[type.kicker, styles.dim]}>PHONE</Text>
+            <View style={styles.phoneRow}>
+              <View style={styles.codeBox}>
+                <Text style={styles.codeText}>+91</Text>
+              </View>
+              <TextInput
+                value={phone}
+                onChangeText={(v) => setPhone(localDigits(v))}
+                placeholder="98450 11204"
+                placeholderTextColor={colors.textDim}
+                keyboardType="phone-pad"
+                maxLength={10}
+                style={[styles.input, styles.phoneInput]}
+                underlineColorAndroid="transparent"
+              />
+            </View>
+          </View>
+
           <Field label="RELATIONSHIP" value={relationship} onChangeText={setRelationship} placeholder="Spouse" last />
         </GlassCard>
 
@@ -143,4 +157,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glassFillRaised,
   },
   errorText: { color: colors.accent, textAlign: "center", ...type.bodySmall },
+  phoneRow: { flexDirection: "row", gap: spacing.md },
+  codeBox: {
+    marginTop: spacing.sm,
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.glassFillRaised,
+  },
+  codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
+  phoneInput: { flex: 1, letterSpacing: 2 },
 });

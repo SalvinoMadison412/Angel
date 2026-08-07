@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground } from "../../components";
 import { useAuth, useDevice, useEmergencyProfile, useProfile } from "../../hooks";
+import { localDigits, toE164 } from "../../lib/phone";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
 
@@ -24,12 +25,6 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
  * writes all three underlying sources (profiles, devices, emergency_profiles)
  * together and returns to view mode.
  */
-/** Strips any country-code prefix/formatting and keeps just the 10-digit local number, matching PhoneEntryScreen's stored shape. */
-function localDigits(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  return digits.length > 10 ? digits.slice(-10) : digits;
-}
-
 export function ProfileScreen() {
   const { signOut } = useAuth();
   const profile = useProfile();
@@ -159,7 +154,7 @@ export function ProfileScreen() {
     setSaveError(null);
     try {
       await Promise.all([
-        profile.save.mutateAsync({ name: name.trim(), phone: `+91${phone}` }),
+        profile.save.mutateAsync({ name: name.trim(), phone: toE164(phone) }),
         device.saveBikeInfo.mutateAsync({ bikeMake: bikeMake.trim() || null, bikeModel: bikeModel.trim() || null }),
         emergencyProfile.save.mutateAsync({
           fullName: fullName.trim() || null,
