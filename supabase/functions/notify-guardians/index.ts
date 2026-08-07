@@ -5,13 +5,14 @@
 // 1. Database Webhook on `insert` to public.crash_tickets (Dashboard →
 //    Database → Webhooks → new hook → table crash_tickets → Insert →
 //    target this function). This is the main India-stack crash alert path:
-//    the instant a crash_tickets row exists, guardians get an SMS (MSG91)
-//    and a voice call (Exotel), and delivery status is written back onto
-//    the crash_tickets row. Auth: Database Webhooks created via the
-//    Dashboard's "Supabase Edge Functions" target send the project's
-//    service_role key as a Bearer token by default — this function checks
-//    that header against SUPABASE_SERVICE_ROLE_KEY (available automatically
-//    to every Edge Function) rather than a hand-rolled shared secret.
+//    the instant a crash_tickets row exists, guardians get a WhatsApp
+//    message (Twilio) and a voice call (Exotel), and delivery status is
+//    written back onto the crash_tickets row. Auth: Database Webhooks
+//    created via the Dashboard's "Supabase Edge Functions" target send the
+//    project's service_role key as a Bearer token by default — this
+//    function checks that header against SUPABASE_SERVICE_ROLE_KEY
+//    (available automatically to every Edge Function) rather than a
+//    hand-rolled shared secret.
 //
 // 2. Direct client call from the app (see sendGuardianAlert in
 //    src/services/emergency/emergencyPipeline.ts) for the lighter,
@@ -21,16 +22,17 @@
 //    session, verified against rider_id in the body — same pattern as any
 //    other user-authenticated Edge Function call.
 //
-// Both paths converge on the same MSG91 SMS + Exotel voice call senders
-// below; only the trigger, auth, and (for path 1) the delivery-status
-// write-back differ.
+// Both paths converge on the same Twilio WhatsApp + Exotel voice call
+// senders below; only the trigger, auth, and (for path 1) the
+// delivery-status write-back differ.
 //
 // Required secrets (Dashboard → Edge Functions → notify-guardians → Secrets,
 // or `supabase secrets set`):
-//   MSG91_API_KEY
-//   MSG91_SENDER_ID
-//   MSG91_DLT_TEMPLATE_ID   — pre-approved DLT template matching the
-//                             message below (name/link/time variables)
+//   TWILIO_ACCOUNT_SID
+//   TWILIO_AUTH_TOKEN
+//   TWILIO_WHATSAPP_NUMBER — Twilio's WhatsApp-enabled sender, e.g.
+//                            "+14155238886" (no "whatsapp:" prefix here —
+//                            that's added when building the From address)
 //   EXOTEL_API_KEY
 //   EXOTEL_API_TOKEN
 //   EXOTEL_SID
@@ -57,46 +59,41 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// MSG91 SMS + Exotel voice call — shared by both invocation paths below.
+// Twilio WhatsApp + Exotel voice call — shared by both invocation paths
+// below.
 // ─────────────────────────────────────────────────────────────────────────
 
-async function sendMsg91Sms(
-  guardianPhone: string,
-  vars: { riderName: string; mapsUrl: string; timestamp: string }
-): Promise<boolean> {
-  const apiKey = Deno.env.get("MSG91_API_KEY");
-  const senderId = Deno.env.get("MSG91_SENDER_ID");
-  const templateId = Deno.env.get("MSG91_DLT_TEMPLATE_ID");
-  if (!apiKey || !senderId || !templateId) {
-    console.warn("[notify-guardians] MSG91 not configured — skipping SMS");
+async function sendTwilioWhatsApp(guardianPhone: string, message: string): Promise<boolean> {
+  const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const whatsappNumber = Deno.env.get("TWILIO_WHATSAPP_NUMBER");
+  if (!accountSid || !authToken || !whatsappNumber) {
+    console.warn("[notify-guardians] Twilio WhatsApp not configured — skipping message");
     return false;
   }
 
   try {
-    // MSG91's Flow API sends a pre-approved DLT template with variables
-    // filled in — required for transactional SMS to Indian numbers, since
-    // free-text SMS content isn't DLT-registered and gets silently dropped
-    // by Indian carriers. The template behind MSG91_DLT_TEMPLATE_ID must
-    // itself contain VAR1/VAR2/VAR3 in the same order as the message below.
-    const res = await fetch("https://api.msg91.com/api/v5/flow/", {
+    const form = new URLSearchParams({
+      From: `whatsapp:${whatsappNumber}`,
+      To: `whatsapp:+91${guardianPhone.replace(/\D/g, "").slice(-10)}`,
+      Body: message,
+    });
+
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
       method: "POST",
-      headers: { authkey: apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        flow_id: templateId,
-        sender: senderId,
-        mobiles: [guardianPhone.replace(/^\+/, "")],
-        VAR1: vars.riderName,
-        VAR2: vars.mapsUrl,
-        VAR3: vars.timestamp,
-      }),
+      headers: {
+        Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form.toString(),
     });
     if (!res.ok) {
-      console.warn(`[notify-guardians] MSG91 ${res.status}: ${await res.text()}`);
+      console.warn(`[notify-guardians] Twilio WhatsApp ${res.status}: ${await res.text()}`);
       return false;
     }
     return true;
   } catch (err) {
-    console.warn("[notify-guardians] MSG91 request failed", err);
+    console.warn("[notify-guardians] Twilio WhatsApp request failed", err);
     return false;
   }
 }
@@ -153,10 +150,10 @@ function buildMapsUrl(lat: number | null, lng: number | null): string {
 
 function buildAlertMessage(riderName: string, mapsUrl: string, timestampIst: string): string {
   return (
-    `URGENT: ${riderName} may have been in a road accident. ` +
+    `🚨 URGENT: ${riderName} may have been in a road accident. ` +
     `Last known location: ${mapsUrl} ` +
     `Time: ${timestampIst} IST. ` +
-    `Please call them or go to their location immediately.`
+    `Please call them immediately.`
   );
 }
 
@@ -171,15 +168,18 @@ async function alertGuardians(
   const timestampIst = new Date(timestampIso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour12: true });
   const message = buildAlertMessage(riderName, mapsUrl, timestampIst);
 
+  // `smsOk` names the return field (and the crash_tickets.sms_status column
+  // it feeds — see handleCrashTicketWebhook) but the delivery channel is now
+  // WhatsApp, not SMS; kept as-is rather than renaming the DB column.
   let smsOk = 0;
   let callOk = 0;
   await Promise.all(
     guardians.map(async (guardian) => {
-      const [smsSent, callInitiated] = await Promise.all([
-        sendMsg91Sms(guardian.phone_number, { riderName, mapsUrl, timestamp: timestampIst }),
+      const [whatsappSent, callInitiated] = await Promise.all([
+        sendTwilioWhatsApp(guardian.phone_number, message),
         initiateExotelCall(guardian.phone_number, message),
       ]);
-      if (smsSent) smsOk += 1;
+      if (whatsappSent) smsOk += 1;
       if (callInitiated) callOk += 1;
     })
   );

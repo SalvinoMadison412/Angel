@@ -20,7 +20,7 @@ export function shouldTriggerAlert(event: CrashEvent): boolean {
 
 type NotifyReason = "missed_checkin" | "confirmed_crash";
 
-// Shared call into the real notify-guardians edge function (MSG91 SMS) —
+// Shared call into the real notify-guardians edge function (Twilio WhatsApp) —
 // used directly by the severity-1 missed-check-in path below, and as a
 // fallback by confirmIncident's severity 2-5 path if its crash_tickets
 // insert failed (normally that path is alerted via the Database Webhook on
@@ -106,8 +106,8 @@ export interface ConfirmIncidentInput {
   // The crash_tickets row CrashAlertScreen creates on mount (severity 2-5
   // always goes through confirmIncident, see shouldTriggerAlert). When
   // present, a Database Webhook on that row's insert (see
-  // supabase/functions/notify-guardians) already alerts guardians via MSG91
-  // SMS + Exotel call — this function must NOT also call notify-guardians
+  // supabase/functions/notify-guardians) already alerts guardians via
+  // Twilio WhatsApp + Exotel call — this function must NOT also call notify-guardians
   // itself, or guardians get double-alerted. Only null when the
   // crash_tickets insert itself failed (offline, RLS error, etc.), in which
   // case there's no row for a webhook to fire on and this falls back to
@@ -183,10 +183,10 @@ export async function confirmIncident({
         lng,
         reason: "confirmed_crash",
       });
-      await notificationService.logEvent(incident.id, `SMS sent to ${sent}/${guardians.length} guardian(s)`);
+      await notificationService.logEvent(incident.id, `WhatsApp sent to ${sent}/${guardians.length} guardian(s)`);
     } catch (err) {
-      console.warn("[emergency] failed to send guardian SMS for confirmed crash", err);
-      await notificationService.logEvent(incident.id, "Guardian SMS failed to send — will not retry automatically");
+      console.warn("[emergency] failed to send guardian WhatsApp message for confirmed crash", err);
+      await notificationService.logEvent(incident.id, "Guardian WhatsApp message failed to send — will not retry automatically");
     }
   }
 
@@ -201,9 +201,9 @@ export async function cancelCrashEvent(event: CrashEvent): Promise<void> {
 // Guardians-only alert path — runs once EmergencyCountdownScreen's 30s
 // countdown expires without the rider cancelling. Deliberately lighter
 // than confirmIncident() above: no incidents row, no responder dispatch —
-// just a real SMS to every guardian on record, sent server-side via the
-// notify-guardians Supabase Edge Function (MSG91). See
-// supabase/functions/notify-guardians for the delivery side.
+// just a real WhatsApp message to every guardian on record, sent
+// server-side via the notify-guardians Supabase Edge Function (Twilio
+// WhatsApp). See supabase/functions/notify-guardians for the delivery side.
 // ───────────────────────────────────────────────────────────────────────
 export interface SendGuardianAlertInput {
   event: CrashEvent;
@@ -211,7 +211,7 @@ export interface SendGuardianAlertInput {
 }
 
 export interface SendGuardianAlertResult {
-  /** How many guardians the edge function actually got an SMS out to. */
+  /** How many guardians the edge function actually got a WhatsApp message out to. */
   sent: number;
 }
 

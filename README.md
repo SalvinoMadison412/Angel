@@ -98,26 +98,35 @@ ordinary SMS delivery to Indian numbers.
 duplicates) the existing `profiles.phone` column and signup trigger this
 depends on — see the comments at the top of that file.
 
-## Guardian crash alerts (MSG91 SMS + Exotel voice calls)
+## Guardian crash alerts (Twilio WhatsApp + Exotel voice calls)
 
 When a severity 2-5 crash creates a `crash_tickets` row, a Supabase
-**Database Webhook** fires the `notify-guardians` Edge Function, which texts
-and calls every guardian on file via MSG91 and Exotel. Three things need to
-be configured outside this repo before that actually delivers anything:
+**Database Webhook** fires the `notify-guardians` Edge Function, which
+messages and calls every guardian on file via Twilio WhatsApp and Exotel.
+Three things need to be configured outside this repo before that actually
+delivers anything:
 
-### 1. MSG91 — SMS
+### 1. Twilio — WhatsApp
 
-MSG91 requires a **DLT-registered template** — free-text SMS to Indian
-numbers gets silently dropped by carriers otherwise.
+1. https://console.twilio.com → Messaging → Try it out → Send a WhatsApp
+   message (sandbox) for development, or apply for a WhatsApp-enabled
+   Twilio Sender for production. Either way you end up with a
+   WhatsApp-enabled Twilio number.
+2. From the Twilio Console root, collect:
+   - `TWILIO_ACCOUNT_SID`
+   - `TWILIO_AUTH_TOKEN`
+   - `TWILIO_WHATSAPP_NUMBER` — the WhatsApp-enabled number itself, e.g.
+     `+14155238886` (no `whatsapp:` prefix — the function adds that when
+     building the `From` address).
+3. In the sandbox, each guardian must first send the sandbox's join code to
+   your Twilio WhatsApp number from their own phone before Twilio will
+   deliver messages to them — a one-time step per guardian, sandbox-only.
+   A production WhatsApp Sender doesn't have this restriction.
 
-1. Register a sender ID and a transactional SMS template on MSG91's DLT
-   portal with three variables, in this order: rider name, Google Maps
-   link, timestamp. The template content must match the message built in
-   `supabase/functions/notify-guardians/index.ts` (`buildAlertMessage`).
-2. From the MSG91 dashboard, collect:
-   - `MSG91_API_KEY`
-   - `MSG91_SENDER_ID`
-   - `MSG91_DLT_TEMPLATE_ID` (the approved template's flow ID)
+`TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN` here can be the same Twilio account
+as the "Phone auth setup" section above, but they're configured in two
+separate places — Supabase's Auth provider settings there, Edge Function
+secrets here — and aren't shared automatically between them.
 
 ### 2. Exotel — voice calls
 
@@ -140,9 +149,9 @@ pre-built **Flow** (an ExoML app) configured in the Exotel dashboard.
 
 ```bash
 supabase secrets set \
-  MSG91_API_KEY=... \
-  MSG91_SENDER_ID=... \
-  MSG91_DLT_TEMPLATE_ID=... \
+  TWILIO_ACCOUNT_SID=... \
+  TWILIO_AUTH_TOKEN=... \
+  TWILIO_WHATSAPP_NUMBER=... \
   EXOTEL_API_KEY=... \
   EXOTEL_API_TOKEN=... \
   EXOTEL_SID=... \
@@ -168,4 +177,4 @@ Dashboard → Database → Webhooks → **Create a new hook**:
 Severity-1 "missed check-in" alerts (`EmergencyCountdownScreen`) don't go
 through this webhook — they never create a `crash_tickets` row — and
 instead call the same Edge Function directly from the app with the caller's
-own session. Both paths share the same MSG91/Exotel senders.
+own session. Both paths share the same Twilio WhatsApp/Exotel senders.
