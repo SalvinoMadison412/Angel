@@ -51,19 +51,22 @@ export function useCancelIncident() {
   });
 }
 
-export function useAssignResponder() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ incidentId, responderId }: { incidentId: string; responderId: string }) => {
-      const { error } = await supabase
-        .from("incidents")
-        .update({ assigned_responder_id: responderId })
-        .eq("id", incidentId);
-      if (error) throw error;
-    },
-    onSuccess: (_data, { incidentId }) => queryClient.invalidateQueries({ queryKey: ["incident", incidentId] }),
-  });
-}
+// TODO: RE-ENABLE FOR V2 — partner/responder matching removed for the v1
+// Play Store release (guardians-only via WhatsApp). Re-add if a live
+// responder-dispatch flow comes back.
+// export function useAssignResponder() {
+//   const queryClient = useQueryClient();
+//   return useMutation({
+//     mutationFn: async ({ incidentId, responderId }: { incidentId: string; responderId: string }) => {
+//       const { error } = await supabase
+//         .from("incidents")
+//         .update({ assigned_responder_id: responderId })
+//         .eq("id", incidentId);
+//       if (error) throw error;
+//     },
+//     onSuccess: (_data, { incidentId }) => queryClient.invalidateQueries({ queryKey: ["incident", incidentId] }),
+//   });
+// }
 
 export function useIncidentEvents(incidentId: string | undefined) {
   const queryClient = useQueryClient();

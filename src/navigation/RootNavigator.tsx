@@ -13,7 +13,6 @@ import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
 import { EmergencyCountdownScreen } from "../screens/crash/EmergencyCountdownScreen";
 import { EmergencyAlertSentScreen } from "../screens/crash/EmergencyAlertSentScreen";
 import { GuardianNotifiedScreen } from "../screens/crash/GuardianNotifiedScreen";
-import { LiveIncidentScreen } from "../screens/incident/LiveIncidentScreen";
 import { ActiveTicketScreen } from "../screens/incident/ActiveTicketScreen";
 import { GuardianFormScreen } from "../screens/guardians/GuardianFormScreen";
 import { DiagnosticScreen } from "../screens/debug/DiagnosticScreen";
@@ -62,7 +61,7 @@ function navigateToCrashAlert(navigation: RootStackNavigation, event: CrashEvent
 // Listens for crash events from both the real sensor and the mock stream
 // (the Home screen's dev "simulate crash" panel feeds the mock one) and
 // routes every event to a fullscreen alert — severity >= 2 goes to the full
-// responder-dispatch flow, severity 1 to the lighter guardians-only
+// crash-alert/dispatch flow, severity 1 to the lighter guardians-only
 // countdown (see shouldTriggerAlert). Each destination screen logs its own
 // outcome locally for the calibration work described in
 // firmware/README.md, same as before.
@@ -196,7 +195,6 @@ function AppNavigator() {
           component={GuardianNotifiedScreen}
           options={{ gestureEnabled: false }}
         />
-        <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
         <Stack.Screen name="ActiveTicket" component={ActiveTicketScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />
         <Stack.Screen name="Diagnostic" component={DiagnosticScreen} />

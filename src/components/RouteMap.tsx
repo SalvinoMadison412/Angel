@@ -5,8 +5,6 @@ import { SchematicRouteMap } from "./SchematicRouteMap";
 interface Props {
   riderLat: number;
   riderLng: number;
-  responderLat: number;
-  responderLng: number;
   width?: number;
   height?: number;
 }
@@ -27,6 +25,7 @@ if (hasMapsKey && isNativeCapable) {
   }
 }
 
+/** A single pin at the given location — used by ActiveTicketScreen to show where a crash was detected. */
 export function RouteMap(props: Props) {
   if (NativeRouteMap) {
     return <NativeRouteMap {...props} />;

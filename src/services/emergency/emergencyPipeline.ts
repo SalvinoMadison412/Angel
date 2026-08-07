@@ -7,7 +7,7 @@ import { Guardian, Incident } from "../../types/database";
 
 export const DEFAULT_COUNTDOWN_SECONDS = 10;
 // Severity-1 events go through the lighter guardians-only countdown
-// (EmergencyCountdownScreen) instead of the full responder-dispatch flow
+// (EmergencyCountdownScreen) instead of the full crash-alert/dispatch flow
 // below — see shouldTriggerAlert. Longer than DEFAULT_COUNTDOWN_SECONDS on
 // purpose: a severity-1 reading is the least certain signal, so the rider
 // gets more time to notice and cancel before guardians are texted.
@@ -178,10 +178,10 @@ export async function cancelCrashEvent(event: CrashEvent): Promise<void> {
 // ───────────────────────────────────────────────────────────────────────
 // Guardians-only alert path — runs once EmergencyCountdownScreen's 30s
 // countdown expires without the rider cancelling. Deliberately lighter
-// than confirmIncident() above: no incidents row, no responder dispatch —
-// just a real SMS to every guardian on record, sent server-side via the
-// notify-guardians Supabase Edge Function (Twilio). See
-// supabase/functions/notify-guardians for the delivery side.
+// than confirmIncident() above: no incidents row, no crash_tickets row —
+// just a real WhatsApp message to every guardian on record, sent
+// server-side via the notify-guardians Supabase Edge Function (Twilio).
+// See supabase/functions/notify-guardians for the delivery side.
 // ───────────────────────────────────────────────────────────────────────
 export interface SendGuardianAlertInput {
   event: CrashEvent;

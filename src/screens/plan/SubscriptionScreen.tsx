@@ -80,7 +80,6 @@ export function SubscriptionScreen() {
 
         <View style={styles.features}>
           <FeatureRow text="Unlimited detections & guardian alerts" />
-          <FeatureRow text="Gig-partner dispatch, 24/7" />
         </View>
 
         <PillButton

@@ -1,6 +1,5 @@
 export type PairingStatus = "unpaired" | "pairing" | "paired";
 export type IncidentStatus = "active" | "cancelled" | "resolved";
-export type ResponderType = "gig_partner" | "auto" | "car_uber";
 export type AlertMode = "call" | "sms";
 export type SubscriptionTier = 3 | 6 | 12;
 export type BloodGroup = "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-";
@@ -63,18 +62,6 @@ export interface Guardian {
   priority: number;
   alert_mode: AlertMode;
   created_at: string;
-}
-
-export interface Responder {
-  id: string;
-  name: string;
-  type: ResponderType;
-  platform_label: string | null;
-  rating: number | null;
-  vehicle_label: string | null;
-  lat: number;
-  lng: number;
-  available: boolean;
 }
 
 export interface Incident {

@@ -4,11 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
-import { useAssignResponder, useAuth, useDevice, useGuardians, useResponders } from "../../hooks";
-import { responderTypesForSeverity } from "../../hooks/useResponders";
+import { useAuth, useDevice, useGuardians } from "../../hooks";
 import { cancelCrashEvent, confirmIncident, queuePendingDispatch } from "../../services/emergency";
-import { notificationService } from "../../services/notifications";
-import { etaMinutes, haversineKm } from "../../lib/geo";
 import { supabase } from "../../lib/supabase";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
@@ -27,8 +24,10 @@ export function CrashAlertScreen() {
   const { session } = useAuth();
   const { data: device } = useDevice();
   const { data: guardians } = useGuardians();
-  const { data: responders } = useResponders(responderTypesForSeverity(severity));
-  const assignResponder = useAssignResponder();
+  // TODO: RE-ENABLE FOR V2 — nearest-responder matching removed for the v1
+  // Play Store release (guardians-only via WhatsApp).
+  // const { data: responders } = useResponders(responderTypesForSeverity(severity));
+  // const assignResponder = useAssignResponder();
   const insets = useSafeAreaInsets();
 
   const [secondsLeft, setSecondsLeft] = useState(() => remainingCountdownSeconds(receivedAt, totalSeconds));
@@ -136,27 +135,30 @@ export function CrashAlertScreen() {
       return;
     }
 
-    const nearest = (responders ?? [])
-      .map((r) => ({ r, distanceKm: haversineKm({ lat: incident.lat ?? 0, lng: incident.lng ?? 0 }, { lat: r.lat, lng: r.lng }) }))
-      .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+    // TODO: RE-ENABLE FOR V2 — nearest-responder matching removed for the
+    // v1 Play Store release (guardians-only via WhatsApp).
+    // const nearest = (responders ?? [])
+    //   .map((r) => ({ r, distanceKm: haversineKm({ lat: incident.lat ?? 0, lng: incident.lng ?? 0 }, { lat: r.lat, lng: r.lng }) }))
+    //   .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+    //
+    // if (nearest) {
+    //   await assignResponder.mutateAsync({ incidentId: incident.id, responderId: nearest.r.id });
+    //   await notificationService.logEvent(
+    //     incident.id,
+    //     `Nearest partner accepted, ${nearest.distanceKm.toFixed(1)} km out · ETA ${etaMinutes(nearest.distanceKm)} min`
+    //   );
+    // }
 
-    if (nearest) {
-      await assignResponder.mutateAsync({ incidentId: incident.id, responderId: nearest.r.id });
-      await notificationService.logEvent(
-        incident.id,
-        `Nearest partner accepted, ${nearest.distanceKm.toFixed(1)} km out · ETA ${etaMinutes(nearest.distanceKm)} min`
-      );
-    }
-
-    // Route to the real Angel Partners ticket-tracking screen when the
-    // crash_tickets insert (kicked off on mount) succeeded; fall back to the
-    // mock-responder LiveIncidentScreen only if it failed, so a dispatch is
-    // never left with nowhere to go.
+    // Route to ActiveTicketScreen — a simple "guardians notified" +
+    // location confirmation, not a partner-matching flow (see v2 TODO
+    // above) — when the crash_tickets insert (kicked off on mount)
+    // succeeded; fall back to the guardians-only confirmation if it
+    // failed, so a dispatch is never left with nowhere to go.
     const ticketId = await ticketPromiseRef.current;
     if (ticketId) {
       navigation.replace("ActiveTicket", { ticketId });
     } else {
-      navigation.replace("LiveIncident", { incidentId: incident.id });
+      navigation.replace("EmergencyAlertSent", { guardianNames: (guardians ?? []).map((g) => g.name) });
     }
   };
 
@@ -235,9 +237,7 @@ export function CrashAlertScreen() {
           <RadialCountdown secondsLeft={Math.max(0, secondsLeft)} totalSeconds={totalSeconds} />
         </View>
 
-        <Text style={[type.body, styles.copy]}>
-          Guardians and nearby responders will be alerted when the timer ends.
-        </Text>
+        <Text style={[type.body, styles.copy]}>Guardians will be alerted when the timer ends.</Text>
 
         <View style={styles.chipRow}>
           {chipGuardians.map((g) => (
