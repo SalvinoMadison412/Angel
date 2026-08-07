@@ -1,9 +1,9 @@
 import { Session } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { createSessionFromUrl, signInWithGoogle as performGoogleSignIn } from "../lib/oauth";
-import { ConfirmationResult, confirmFirebaseOtp, sendFirebaseOtp } from "../lib/firebase";
+import { phoneAuthErrorMessage } from "../lib/authErrors";
 
 interface AuthContextValue {
   session: Session | null;
@@ -19,11 +19,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
-  // Firebase's phone auth is two calls: signInWithPhoneNumber() returns this
-  // confirmation handle, which confirm(code) later needs. Kept in a ref (not
-  // state) since it's write-once-per-send and reading it never needs to
-  // trigger a re-render.
-  const confirmationRef = useRef<ConfirmationResult | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -54,31 +49,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       session,
       initializing,
-      // Phone login runs through Firebase Phone Auth, not Supabase's own
-      // phone provider — Supabase's default SMS delivery to Indian numbers
-      // was unreliable. Firebase sends the OTP; once verified, its ID token
-      // is exchanged for a real Supabase session via signInWithIdToken
-      // (requires Firebase Auth enabled as a Third-Party Auth provider in
-      // the Supabase dashboard — see docs/FIREBASE_SETUP.md).
+      // Phone login goes through Supabase's native phone provider, backed by
+      // Twilio Verify (configured in the Supabase dashboard — Verify, not
+      // plain Twilio SMS, since Verify-issued OTPs are exempt from TRAI's
+      // DLT sender-registration rules that block ordinary SMS to Indian
+      // numbers). See README "Phone auth setup" for the dashboard steps.
       sendOtp: async (phone: string) => {
         try {
-          confirmationRef.current = await sendFirebaseOtp(phone);
-          return { error: null };
+          const { error } = await supabase.auth.signInWithOtp({ phone });
+          return { error: error ? phoneAuthErrorMessage(error) : null };
         } catch (err) {
-          confirmationRef.current = null;
-          return { error: err instanceof Error ? err.message : "Failed to send OTP" };
+          return { error: phoneAuthErrorMessage(err) };
         }
       },
-      verifyOtp: async (_phone: string, token: string) => {
-        const confirmation = confirmationRef.current;
-        if (!confirmation) return { error: "OTP session expired — request a new code" };
+      verifyOtp: async (phone: string, token: string) => {
         try {
-          const idToken = await confirmFirebaseOtp(confirmation, token);
-          const { error } = await supabase.auth.signInWithIdToken({ provider: "firebase", token: idToken });
-          if (!error) confirmationRef.current = null;
-          return { error: error?.message ?? null };
+          const { error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
+          return { error: error ? phoneAuthErrorMessage(error) : null };
         } catch (err) {
-          return { error: err instanceof Error ? err.message : "Invalid code" };
+          return { error: phoneAuthErrorMessage(err) };
         }
       },
       signInWithGoogle: async () => {

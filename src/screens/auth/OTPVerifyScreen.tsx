@@ -7,11 +7,11 @@ import { colors, spacing, type } from "../../theme";
 import { AuthStackNavigation, AuthStackParamList } from "../../navigation/types";
 
 const CODE_LENGTH = 6;
-const RESEND_SECONDS = 30;
+const RESEND_SECONDS = 60;
 
-export function OtpScreen() {
+export function OTPVerifyScreen() {
   const navigation = useNavigation<AuthStackNavigation>();
-  const route = useRoute<RouteProp<AuthStackParamList, "Otp">>();
+  const route = useRoute<RouteProp<AuthStackParamList, "OTPVerify">>();
   const { phone } = route.params;
   const { verifyOtp, sendOtp } = useAuth();
 
@@ -40,8 +40,14 @@ export function OtpScreen() {
 
   const handleResend = async () => {
     if (secondsLeft > 0) return;
+    setError(null);
+    setCode("");
+    const { error: resendError } = await sendOtp(phone);
+    if (resendError) {
+      setError(resendError);
+      return;
+    }
     setSecondsLeft(RESEND_SECONDS);
-    await sendOtp(phone);
   };
 
   return (

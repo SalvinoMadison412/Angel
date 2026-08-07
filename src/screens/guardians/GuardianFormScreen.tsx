@@ -6,6 +6,7 @@ import { AlertMode } from "../../types/database";
 import { useGuardians } from "../../hooks/useGuardians";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
+import { digitsFromPhone, isValidIndianMobileDigits, toE164IndianPhone } from "../../lib/phone";
 
 export function GuardianFormScreen() {
   const navigation = useNavigation<RootStackNavigation>();
@@ -16,21 +17,36 @@ export function GuardianFormScreen() {
   const existing = useMemo(() => guardians?.find((g) => g.id === guardianId), [guardians, guardianId]);
 
   const [name, setName] = useState(existing?.name ?? "");
-  const [phone, setPhone] = useState(existing?.phone ?? "");
+  const [phoneDigits, setPhoneDigits] = useState(existing ? digitsFromPhone(existing.phone_number) : "");
   const [relationship, setRelationship] = useState(existing?.relationship ?? "");
   const [alertMode, setAlertMode] = useState<AlertMode>(existing?.alert_mode ?? "call");
+  const [error, setError] = useState<string | null>(null);
 
-  const canSave = name.trim().length > 0 && phone.trim().length >= 10;
+  const canSave = name.trim().length > 0 && phoneDigits.length === 10;
 
   const handleSave = async () => {
     if (!canSave) return;
-    const input = { name: name.trim(), phone: phone.trim(), relationship: relationship.trim(), alertMode };
-    if (existing) {
-      await updateGuardian.mutateAsync({ id: existing.id, input });
-    } else {
-      await addGuardian.mutateAsync(input);
+    if (!isValidIndianMobileDigits(phoneDigits)) {
+      setError("Enter a valid 10-digit Indian mobile number (starts with 6, 7, 8, or 9).");
+      return;
     }
-    navigation.goBack();
+    setError(null);
+    const input = {
+      name: name.trim(),
+      phoneNumber: toE164IndianPhone(phoneDigits),
+      relationship: relationship.trim(),
+      alertMode,
+    };
+    try {
+      if (existing) {
+        await updateGuardian.mutateAsync({ id: existing.id, input });
+      } else {
+        await addGuardian.mutateAsync(input);
+      }
+      navigation.goBack();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save guardian");
+    }
   };
 
   const handleDelete = async () => {
@@ -46,15 +62,30 @@ export function GuardianFormScreen() {
       <View style={styles.body}>
         <GlassCard>
           <Field label="FULL NAME" value={name} onChangeText={setName} placeholder="Anita Sharma" />
-          <Field
-            label="PHONE"
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+91 98450 11204"
-            keyboardType="phone-pad"
-          />
+
+          <View style={styles.fieldSpacing}>
+            <Text style={[type.kicker, styles.dim]}>MOBILE NUMBER</Text>
+            <View style={styles.phoneRow}>
+              <View style={styles.codeBox}>
+                <Text style={styles.codeText}>+91</Text>
+              </View>
+              <TextInput
+                value={phoneDigits}
+                onChangeText={(v) => setPhoneDigits(v.replace(/\D/g, "").slice(0, 10))}
+                placeholder="98450 11204"
+                placeholderTextColor={colors.textDim}
+                keyboardType="number-pad"
+                style={styles.phoneInput}
+                maxLength={10}
+                underlineColorAndroid="transparent"
+              />
+            </View>
+          </View>
+
           <Field label="RELATIONSHIP" value={relationship} onChangeText={setRelationship} placeholder="Spouse" last />
         </GlassCard>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <GlassCard>
           <Text style={[type.kicker, styles.dim]}>ALERT MODE</Text>
@@ -138,6 +169,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: colors.glassFillRaised,
   },
+  phoneRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
+  codeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.glassFillRaised,
+  },
+  codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
+  phoneInput: {
+    flex: 1,
+    ...type.body,
+    fontFamily: type.button.fontFamily,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.glassFillRaised,
+    letterSpacing: 2,
+  },
+  error: { color: colors.accent, ...type.bodySmall },
   modeRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.md },
   modeOption: {
     flex: 1,

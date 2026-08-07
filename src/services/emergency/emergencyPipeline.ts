@@ -20,11 +20,13 @@ export function shouldTriggerAlert(event: CrashEvent): boolean {
 
 type NotifyReason = "missed_checkin" | "confirmed_crash";
 
-// Shared call into the real notify-guardians edge function (Twilio SMS) —
-// both alert paths below go through this so severity 1 (missed check-in)
-// and severity 2-5 (confirmed crash) guardians get an actual text, not just
-// the in-app incident_events log. Best-effort by design: the caller decides
-// whether a failure here should block anything else.
+// Shared call into the real notify-guardians edge function (MSG91 SMS) —
+// used directly by the severity-1 missed-check-in path below, and as a
+// fallback by confirmIncident's severity 2-5 path if its crash_tickets
+// insert failed (normally that path is alerted via the Database Webhook on
+// crash_tickets insert instead — see notify-guardians' header comment).
+// Best-effort by design: the caller decides whether a failure here should
+// block anything else.
 async function invokeNotifyGuardians(input: {
   userId: string;
   severity: number;
@@ -101,9 +103,25 @@ export interface ConfirmIncidentInput {
   userId: string;
   deviceId: string | null;
   guardians: Guardian[];
+  // The crash_tickets row CrashAlertScreen creates on mount (severity 2-5
+  // always goes through confirmIncident, see shouldTriggerAlert). When
+  // present, a Database Webhook on that row's insert (see
+  // supabase/functions/notify-guardians) already alerts guardians via MSG91
+  // SMS + Exotel call — this function must NOT also call notify-guardians
+  // itself, or guardians get double-alerted. Only null when the
+  // crash_tickets insert itself failed (offline, RLS error, etc.), in which
+  // case there's no row for a webhook to fire on and this falls back to
+  // calling notify-guardians directly.
+  ticketId: string | null;
 }
 
-export async function confirmIncident({ event, userId, deviceId, guardians }: ConfirmIncidentInput): Promise<Incident> {
+export async function confirmIncident({
+  event,
+  userId,
+  deviceId,
+  guardians,
+  ticketId,
+}: ConfirmIncidentInput): Promise<Incident> {
   await logCrashEventLocally(event, "confirmed");
 
   const { lat, lng } = await captureCurrentLocation();
@@ -146,12 +164,16 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
 
   await notificationService.notifyGuardians(incident, guardians, medicalInfo);
 
-  // Confirmed severity 2-5 crashes must reach guardians by real SMS, not
-  // just the incident_events log above — that log only ever surfaces inside
-  // the app's own Live Incident screen, which a guardian has no reason to
-  // be looking at. Best-effort: a failure here must not undo the dispatch
-  // that already happened above.
-  if (guardians.length > 0) {
+  // Confirmed severity 2-5 crashes must reach guardians by real SMS/call,
+  // not just the incident_events log above — that log only ever surfaces
+  // inside the app's own Live Incident screen, which a guardian has no
+  // reason to be looking at. Normally the crash_tickets Database Webhook
+  // (see supabase/functions/notify-guardians) already handles this the
+  // instant the ticket row was inserted, well before this function even
+  // runs — so only fall back to calling it directly here if that insert
+  // never happened. Best-effort either way: a failure here must not undo
+  // the dispatch that already happened above.
+  if (!ticketId && guardians.length > 0) {
     try {
       const { sent } = await invokeNotifyGuardians({
         userId,
@@ -180,7 +202,7 @@ export async function cancelCrashEvent(event: CrashEvent): Promise<void> {
 // countdown expires without the rider cancelling. Deliberately lighter
 // than confirmIncident() above: no incidents row, no responder dispatch —
 // just a real SMS to every guardian on record, sent server-side via the
-// notify-guardians Supabase Edge Function (Twilio). See
+// notify-guardians Supabase Edge Function (MSG91). See
 // supabase/functions/notify-guardians for the delivery side.
 // ───────────────────────────────────────────────────────────────────────
 export interface SendGuardianAlertInput {

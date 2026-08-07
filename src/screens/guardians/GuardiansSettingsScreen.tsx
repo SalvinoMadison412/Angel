@@ -2,15 +2,17 @@ import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Avatar, GlassCard, ScreenBackground, Tag } from "../../components";
-import { guardianTag, initialsFor, useGuardians } from "../../hooks/useGuardians";
+import { guardianTag, initialsFor, MAX_GUARDIANS, useGuardians } from "../../hooks/useGuardians";
 import { colors, fontFamily, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
+import { maskIndianPhone } from "../../lib/phone";
 
-export function GuardiansScreen() {
+export function GuardiansSettingsScreen() {
   const navigation = useNavigation<AppTabNavigation<"Guardians">>();
   const { data: guardians, reorderGuardians } = useGuardians();
 
   const list = guardians ?? [];
+  const canAddMore = list.length < MAX_GUARDIANS;
 
   const move = (index: number, dir: -1 | 1) => {
     const target = index + dir;
@@ -27,6 +29,9 @@ export function GuardiansScreen() {
       <Text style={[type.bodySmall, styles.subtitle]}>
         Called in this order the moment a crash is confirmed. Use the arrows to reorder.
       </Text>
+      <Text style={[type.label, styles.count]}>
+        {list.length} OF {MAX_GUARDIANS} GUARDIANS ADDED
+      </Text>
 
       {list.map((guardian, index) => (
         <Pressable key={guardian.id} onPress={() => navigation.navigate("GuardianForm", { guardianId: guardian.id })}>
@@ -40,7 +45,7 @@ export function GuardiansScreen() {
                   <Tag label={guardianTag(index, guardian.alert_mode)} variant={index === 0 ? "accent" : "neutral"} />
                 </View>
                 <Text style={styles.meta}>
-                  {(guardian.relationship ?? "GUARDIAN").toUpperCase()} · {guardian.phone}
+                  {(guardian.relationship ?? "GUARDIAN").toUpperCase()} · {maskIndianPhone(guardian.phone_number)}
                 </Text>
               </View>
               <View style={styles.handle}>
@@ -56,11 +61,17 @@ export function GuardiansScreen() {
         </Pressable>
       ))}
 
-      <Pressable onPress={() => navigation.navigate("GuardianForm", {})}>
-        <View style={styles.addCard}>
-          <Text style={styles.addText}>+ ADD GUARDIAN</Text>
-        </View>
-      </Pressable>
+      {canAddMore ? (
+        <Pressable onPress={() => navigation.navigate("GuardianForm", {})}>
+          <View style={styles.addCard}>
+            <Text style={styles.addText}>+ ADD GUARDIAN</Text>
+          </View>
+        </Pressable>
+      ) : (
+        <Text style={[type.bodySmall, styles.dim, styles.maxedText]}>
+          You've added the maximum of {MAX_GUARDIANS} guardians.
+        </Text>
+      )}
     </ScreenBackground>
   );
 }
@@ -69,7 +80,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
   dim: { color: colors.textDim },
   title: { color: colors.text, marginTop: spacing.xs },
-  subtitle: { color: colors.textMuted, marginBottom: spacing.md },
+  subtitle: { color: colors.textMuted, marginBottom: spacing.sm },
+  count: { color: colors.textDim, marginBottom: spacing.md },
   row: {},
   rowInner: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   index: { color: colors.textDim, fontFamily: type.kicker.fontFamily, fontSize: 11, width: 18 },
@@ -88,4 +100,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   addText: { color: colors.textMuted, fontFamily: type.button.fontFamily, fontSize: 13, letterSpacing: 1.5 },
+  maxedText: { textAlign: "center" },
 });

@@ -5,8 +5,9 @@ import { GlassCard, HoloMotorcycle, PillButton, ScreenBackground } from "../../c
 import { useAuth } from "../../hooks/useAuth";
 import { colors, spacing, type } from "../../theme";
 import { AuthStackNavigation } from "../../navigation/types";
+import { isValidIndianMobileDigits, toE164IndianPhone } from "../../lib/phone";
 
-export function PhoneEntryScreen() {
+export function PhoneLoginScreen() {
   const navigation = useNavigation<AuthStackNavigation>();
   const { sendOtp, signInWithGoogle } = useAuth();
   const [phone, setPhone] = useState("");
@@ -20,16 +21,20 @@ export function PhoneEntryScreen() {
 
   const handleSend = async () => {
     if (!canSubmit) return;
+    if (!isValidIndianMobileDigits(digits)) {
+      setError("Enter a valid 10-digit Indian mobile number (starts with 6, 7, 8, or 9).");
+      return;
+    }
     setLoading(true);
     setError(null);
-    const fullPhone = `+91${digits}`;
+    const fullPhone = toE164IndianPhone(digits);
     const { error: sendError } = await sendOtp(fullPhone);
     setLoading(false);
     if (sendError) {
       setError(sendError);
       return;
     }
-    navigation.navigate("Otp", { phone: fullPhone });
+    navigation.navigate("OTPVerify", { phone: fullPhone });
   };
 
   const handleGoogleSignIn = async () => {
@@ -74,7 +79,6 @@ export function PhoneEntryScreen() {
         <View style={styles.phoneRow}>
           <View style={styles.codeBox}>
             <Text style={styles.codeText}>+91</Text>
-            <Text style={styles.chevron}>▾</Text>
           </View>
           <TextInput
             value={phone}
@@ -144,7 +148,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glassFillRaised,
   },
   codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
-  chevron: { color: colors.textMuted, fontSize: 10 },
   phoneInput: {
     flex: 1,
     ...type.body,

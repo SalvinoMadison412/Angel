@@ -70,3 +70,102 @@ downstream flow is different from a real crash.
 Run the migrations in `supabase/migrations/` in order against your project
 (SQL Editor → paste each file → run). `0002_crash_metrics.sql` adds the raw
 sensor metrics columns the emergency pipeline writes alongside severity.
+
+## Phone auth setup (Twilio Verify)
+
+Phone login (`PhoneLoginScreen` → `OTPVerifyScreen`) uses Supabase's native
+phone provider, backed by **Twilio Verify** — not plain Twilio SMS. Verify
+issues and checks the OTP itself rather than sending a raw SMS, which is
+what makes it exempt from TRAI's DLT sender-registration rules that block
+ordinary SMS delivery to Indian numbers.
+
+1. https://console.twilio.com → Verify → Services → create a Verify Service
+   (or reuse one). Copy its **Service SID** (`VAxxxxxxxx...`).
+2. From the Twilio Console root, copy your **Account SID** and **Auth
+   Token**.
+3. Supabase Dashboard → project `vqkwdwbzbwjplxqpqsuj` → Authentication →
+   Providers → **Phone** → Enable.
+4. Set the SMS provider to **Twilio Verify** and fill in:
+   - `TWILIO_ACCOUNT_SID`
+   - `TWILIO_AUTH_TOKEN`
+   - `TWILIO_VERIFY_SERVICE_SID`
+5. Save. No app code changes are needed beyond what's already in this repo
+   — `sendOtp`/`verifyOtp` in `src/hooks/useAuth.tsx` call
+   `supabase.auth.signInWithOtp` / `verifyOtp` directly, and Supabase routes
+   the actual delivery through whatever provider is configured here.
+
+`supabase/migrations/0010_phone_auth_setup.sql` documents (rather than
+duplicates) the existing `profiles.phone` column and signup trigger this
+depends on — see the comments at the top of that file.
+
+## Guardian crash alerts (MSG91 SMS + Exotel voice calls)
+
+When a severity 2-5 crash creates a `crash_tickets` row, a Supabase
+**Database Webhook** fires the `notify-guardians` Edge Function, which texts
+and calls every guardian on file via MSG91 and Exotel. Three things need to
+be configured outside this repo before that actually delivers anything:
+
+### 1. MSG91 — SMS
+
+MSG91 requires a **DLT-registered template** — free-text SMS to Indian
+numbers gets silently dropped by carriers otherwise.
+
+1. Register a sender ID and a transactional SMS template on MSG91's DLT
+   portal with three variables, in this order: rider name, Google Maps
+   link, timestamp. The template content must match the message built in
+   `supabase/functions/notify-guardians/index.ts` (`buildAlertMessage`).
+2. From the MSG91 dashboard, collect:
+   - `MSG91_API_KEY`
+   - `MSG91_SENDER_ID`
+   - `MSG91_DLT_TEMPLATE_ID` (the approved template's flow ID)
+
+### 2. Exotel — voice calls
+
+Exotel has no "speak this text" REST call — a call can only connect to a
+pre-built **Flow** (an ExoML app) configured in the Exotel dashboard.
+
+1. Exotel dashboard → Flows → new Flow → add a **Text-to-Speech** applet
+   that reads `{{CustomField}}` → publish.
+2. Copy that Flow's App ID.
+3. Collect from the Exotel dashboard:
+   - `EXOTEL_API_KEY`
+   - `EXOTEL_API_TOKEN`
+   - `EXOTEL_SID`
+   - `EXOTEL_SUBDOMAIN`
+   - `EXOTEL_CALLER_ID` (your Exotel virtual number)
+   - `EXOTEL_FLOW_APP_ID` (the Flow from step 2 — not in the original
+     credentials list, but required for the call to actually say anything)
+
+### 3. Set the secrets
+
+```bash
+supabase secrets set \
+  MSG91_API_KEY=... \
+  MSG91_SENDER_ID=... \
+  MSG91_DLT_TEMPLATE_ID=... \
+  EXOTEL_API_KEY=... \
+  EXOTEL_API_TOKEN=... \
+  EXOTEL_SID=... \
+  EXOTEL_SUBDOMAIN=... \
+  EXOTEL_CALLER_ID=... \
+  EXOTEL_FLOW_APP_ID=...
+```
+
+(Or Dashboard → Edge Functions → `notify-guardians` → Secrets.)
+
+### 4. Create the Database Webhook
+
+Dashboard → Database → Webhooks → **Create a new hook**:
+
+- Table: `crash_tickets`
+- Events: `Insert`
+- Type: Supabase Edge Functions
+- Edge Function: `notify-guardians`
+- Auth: service role key (the default) — `notify-guardians` checks the
+  incoming `Authorization` header against `SUPABASE_SERVICE_ROLE_KEY`, so
+  this must stay selected.
+
+Severity-1 "missed check-in" alerts (`EmergencyCountdownScreen`) don't go
+through this webhook — they never create a `crash_tickets` row — and
+instead call the same Edge Function directly from the app with the caller's
+own session. Both paths share the same MSG91/Exotel senders.

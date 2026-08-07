@@ -43,8 +43,3 @@ yarn-error.*
 
 # release signing — never commit; back this up somewhere safe outside git
 /keystores/
-
-# Firebase native config — contains real project credentials, never commit.
-# Copy google-services.json.example to google-services.json and fill it in
-# (see docs/FIREBASE_SETUP.md).
-/google-services.json

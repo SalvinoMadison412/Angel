@@ -117,6 +117,8 @@ export function CrashAlertScreen() {
     // queued. Now it queues the dispatch for automatic background retry
     // (see offlineQueue.ts) and re-arms the buttons so the rider isn't
     // stuck waiting on a screen that can't move forward on its own.
+    const ticketId = await ticketPromiseRef.current;
+
     let incident;
     try {
       incident = await confirmIncident({
@@ -124,6 +126,7 @@ export function CrashAlertScreen() {
         userId: session.user.id,
         deviceId: device?.id ?? null,
         guardians: guardians ?? [],
+        ticketId,
       });
     } catch (err) {
       console.warn("[crash-ticket] dispatch failed, queuing for retry", err);
@@ -152,7 +155,6 @@ export function CrashAlertScreen() {
     // crash_tickets insert (kicked off on mount) succeeded; fall back to the
     // mock-responder LiveIncidentScreen only if it failed, so a dispatch is
     // never left with nowhere to go.
-    const ticketId = await ticketPromiseRef.current;
     if (ticketId) {
       navigation.replace("ActiveTicket", { ticketId });
     } else {

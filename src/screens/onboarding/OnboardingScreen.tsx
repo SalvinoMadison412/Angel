@@ -7,6 +7,7 @@ import { useDevice, useEmergencyProfile, useGuardians, useProfile } from "../../
 import { requestCrashNotificationPermission } from "../../services/notifications";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
+import { isValidIndianMobileDigits, maskIndianPhone, toE164IndianPhone } from "../../lib/phone";
 
 // Local-only — not a Supabase column, since existing tables can't be
 // altered for this. Nothing reads this yet; it's captured so it's available
@@ -301,22 +302,32 @@ function ContactsStep({
   onContinue: () => void;
 }) {
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phoneDigits, setPhoneDigits] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const existing = guardians.data ?? [];
   const canAddMore = existing.length < MAX_CONTACTS;
-  const canAdd = canAddMore && name.trim().length > 0 && phone.trim().length >= 10;
+  const canAdd = canAddMore && name.trim().length > 0 && phoneDigits.length === 10;
 
   const handleAdd = async () => {
     if (!canAdd) return;
-    await guardians.addGuardian.mutateAsync({
-      name: name.trim(),
-      phone: phone.trim(),
-      relationship: "",
-      alertMode: "call",
-    });
-    setName("");
-    setPhone("");
+    if (!isValidIndianMobileDigits(phoneDigits)) {
+      setError("Enter a valid 10-digit Indian mobile number (starts with 6, 7, 8, or 9).");
+      return;
+    }
+    setError(null);
+    try {
+      await guardians.addGuardian.mutateAsync({
+        name: name.trim(),
+        phoneNumber: toE164IndianPhone(phoneDigits),
+        relationship: "",
+        alertMode: "call",
+      });
+      setName("");
+      setPhoneDigits("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add guardian");
+    }
   };
 
   return (
@@ -337,7 +348,7 @@ function ContactsStep({
             <View key={g.id} style={[styles.contactRow, index > 0 && styles.contactRowDivider]}>
               <View>
                 <Text style={[type.body, styles.contactName]}>{g.name}</Text>
-                <Text style={[type.bodySmall, styles.dim]}>{g.phone}</Text>
+                <Text style={[type.bodySmall, styles.dim]}>{maskIndianPhone(g.phone_number)}</Text>
               </View>
               <Pressable onPress={() => guardians.removeGuardian.mutate(g.id)} hitSlop={12}>
                 <Text style={styles.removeText}>REMOVE</Text>
@@ -360,15 +371,22 @@ function ContactsStep({
             style={[styles.input, styles.fieldSpacing]}
             underlineColorAndroid="transparent"
           />
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+91 98450 11204"
-            placeholderTextColor={colors.textDim}
-            keyboardType="phone-pad"
-            style={styles.input}
-            underlineColorAndroid="transparent"
-          />
+          <View style={styles.phoneRow}>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeText}>+91</Text>
+            </View>
+            <TextInput
+              value={phoneDigits}
+              onChangeText={(v) => setPhoneDigits(v.replace(/\D/g, "").slice(0, 10))}
+              placeholder="98450 11204"
+              placeholderTextColor={colors.textDim}
+              keyboardType="number-pad"
+              style={styles.phoneInput}
+              maxLength={10}
+              underlineColorAndroid="transparent"
+            />
+          </View>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
           <PillButton
             title="+ ADD CONTACT"
             variant="outline"
@@ -477,6 +495,28 @@ const styles = StyleSheet.create({
   },
   multilineInput: { minHeight: 96 },
   fieldSpacing: { marginBottom: spacing.lg },
+  phoneRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
+  codeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glassFillRaised,
+  },
+  codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
+  phoneInput: {
+    flex: 1,
+    ...type.body,
+    fontFamily: type.button.fontFamily,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glassFillRaised,
+    letterSpacing: 2,
+  },
+  error: { color: colors.accent, ...type.bodySmall, marginTop: spacing.sm },
   dobRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
   dobInput: { flex: 1, marginTop: 0, textAlign: "center" },
   dobInputYear: { flex: 1.6, marginTop: 0, textAlign: "center" },

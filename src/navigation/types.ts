@@ -4,8 +4,8 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CrashEvent } from "../services/bluetooth";
 
 export type AuthStackParamList = {
-  PhoneEntry: undefined;
-  Otp: { phone: string };
+  PhoneLogin: undefined;
+  OTPVerify: { phone: string };
 };
 
 export type AuthStackNavigation = NativeStackNavigationProp<AuthStackParamList>;

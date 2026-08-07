@@ -5,7 +5,7 @@ import { TabBarIcon, TabBarIconName } from "../components";
 import { colors, fontFamily } from "../theme";
 import { HomeScreen } from "../screens/home/HomeScreen";
 import { DeviceScreen } from "../screens/device/DeviceScreen";
-import { GuardiansScreen } from "../screens/guardians/GuardiansScreen";
+import { GuardiansSettingsScreen } from "../screens/guardians/GuardiansSettingsScreen";
 import { ProfileNavigator } from "./ProfileNavigator";
 import { AppTabParamList } from "./types";
 
@@ -43,7 +43,7 @@ export function AppTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Device" component={DeviceScreen} />
-      <Tab.Screen name="Guardians" component={GuardiansScreen} />
+      <Tab.Screen name="Guardians" component={GuardiansSettingsScreen} />
       <Tab.Screen name="Profile" component={ProfileNavigator} />
     </Tab.Navigator>
   );

@@ -85,6 +85,12 @@ export async function flushPendingDispatches(): Promise<void> {
           userId: item.userId,
           deviceId: item.deviceId,
           guardians: guardians ?? [],
+          // This retry path only exists because the original dispatch's
+          // crash_tickets insert never happened (offline at the time) — so
+          // there's no ticket for the Database Webhook to have fired on,
+          // and confirmIncident must fall back to notifying guardians
+          // directly.
+          ticketId: null,
         });
       } catch (err) {
         console.warn("[offline-queue] retry failed, will try again later", err);

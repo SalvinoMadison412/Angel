@@ -54,7 +54,6 @@
         }
       ],
       "expo-web-browser",
-      "@react-native-firebase/app",
       "./plugins/withReleaseSigning.js",
       "./plugins/withoutSystemAlertWindow.js"
     ]

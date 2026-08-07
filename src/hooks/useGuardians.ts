@@ -3,9 +3,11 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "./useAuth";
 import { AlertMode, Guardian } from "../types/database";
 
+export const MAX_GUARDIANS = 3;
+
 export interface GuardianInput {
   name: string;
-  phone: string;
+  phoneNumber: string;
   relationship: string;
   alertMode: AlertMode;
 }
@@ -32,15 +34,21 @@ export function useGuardians() {
 
   const addGuardian = useMutation({
     mutationFn: async (input: GuardianInput) => {
+      if ((query.data?.length ?? 0) >= MAX_GUARDIANS) {
+        throw new Error(`You can add at most ${MAX_GUARDIANS} guardians`);
+      }
       const nextPriority = (query.data?.length ?? 0) + 1;
       const { error } = await supabase.from("guardians").insert({
         user_id: userId,
         name: input.name,
-        phone: input.phone,
+        phone_number: input.phoneNumber,
         relationship: input.relationship,
         alert_mode: input.alertMode,
         priority: nextPriority,
       });
+      // The DB also enforces this (enforce_guardian_limit trigger,
+      // 0011_guardians_table.sql) — this check just gives a clearer error
+      // than the trigger's raised exception before it even makes the call.
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -52,7 +60,7 @@ export function useGuardians() {
         .from("guardians")
         .update({
           name: input.name,
-          phone: input.phone,
+          phone_number: input.phoneNumber,
           relationship: input.relationship,
           alert_mode: input.alertMode,
         })

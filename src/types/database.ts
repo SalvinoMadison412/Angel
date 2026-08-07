@@ -58,7 +58,7 @@ export interface Guardian {
   id: string;
   user_id: string;
   name: string;
-  phone: string;
+  phone_number: string;
   relationship: string | null;
   priority: number;
   alert_mode: AlertMode;
