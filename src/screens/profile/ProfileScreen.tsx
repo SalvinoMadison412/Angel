@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground } from "../../components";
-import { useDevice, useEmergencyProfile, useProfile } from "../../hooks";
+import { useAuth, useDevice, useEmergencyProfile, useProfile } from "../../hooks";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
 
@@ -31,6 +31,7 @@ function localDigits(raw: string): string {
 }
 
 export function ProfileScreen() {
+  const { signOut } = useAuth();
   const profile = useProfile();
   const emergencyProfile = useEmergencyProfile();
   const device = useDevice();
@@ -40,6 +41,7 @@ export function ProfileScreen() {
   const [showErrors, setShowErrors] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Personal info (profiles table)
   const [name, setName] = useState("");
@@ -130,6 +132,22 @@ export function ProfileScreen() {
     setShowErrors(false);
     setSaveError(null);
     setEditing(false);
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Log out?", "You'll need to verify your phone number again to sign back in.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: async () => {
+          setLoggingOut(true);
+          await signOut();
+          // No navigation needed — RootNavigator swaps to AuthNavigator on
+          // its own the moment the session clears, same as sign-in.
+        },
+      },
+    ]);
   };
 
   const handleSave = async () => {
@@ -337,6 +355,10 @@ export function ProfileScreen() {
       </GlassCard>
 
       {editing && <PillButton title="CANCEL" variant="outline" onPress={handleCancel} disabled={saving} />}
+
+      {!editing && (
+        <PillButton title="LOG OUT" variant="ghost" onPress={handleLogout} loading={loggingOut} />
+      )}
     </ScreenBackground>
   );
 }
