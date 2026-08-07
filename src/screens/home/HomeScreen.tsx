@@ -2,8 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { GlassCard, HoloMotorcycle, ScreenBackground, SeverityMeter, StatTile } from "../../components";
-import { useCrashDetector, useCurrentSubscription, useGuardians } from "../../hooks";
-import { daysLeft } from "../../hooks/useSubscription";
+import { useCrashDetector, useGuardians } from "../../hooks";
 import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
 import { colors, fontFamily, severityColor, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
@@ -28,7 +27,6 @@ const formatReadingTime = (receivedAt: number) => new Date(receivedAt).toLocaleT
 export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: guardians } = useGuardians();
-  const { data: subscription } = useCurrentSubscription();
   const { isLinked, isReconnecting, telemetry, lastEvent } = useCrashDetector();
   const { simulateCrash, simulateFault, clearSimulatedFault } = useCrashDetector({ mock: true });
 
@@ -159,19 +157,20 @@ export function HomeScreen() {
         </GlassCard>
       </Pressable>
 
-      <Pressable onPress={() => navigation.navigate("Profile", { screen: "Plan" })}>
-        <GlassCard style={styles.listRow}>
-          <View style={styles.listRowInner}>
-            <View>
-              <Text style={[type.body, styles.listTitle]}>Plan Details</Text>
-              <Text style={[type.bodySmall, styles.listSubtitle]}>
-                {subscription ? `${subscription.tier}-MONTH · ${daysLeft(subscription.end_date)} DAYS LEFT` : "NO ACTIVE PLAN"}
-              </Text>
-            </View>
-            <Text style={styles.arrow}>→</Text>
-          </View>
-        </GlassCard>
+      <Pressable
+        style={({ pressed }) => [styles.helpButton, pressed && styles.helpButtonPressed]}
+        onPress={() => navigation.navigate("GuardianNotified")}
+        hitSlop={8}
+      >
+        <Text style={styles.helpButtonText}>I NEED HELP NOW</Text>
       </Pressable>
+
+      {/*
+        DEBUG · SIMULATE DEVICE SIGNAL — commented out for release, not
+        deleted, since it's the fastest way to exercise the full crash-alert
+        flow without real hardware. Re-enable for internal builds only.
+        See mockMetricsForSeverity/handleSimulateCrash above and
+        simulateFault/clearSimulatedFault from the mock useCrashDetector().
 
       <GlassCard style={styles.debugCard}>
         <Text style={[type.kicker, styles.dimText]}>DEBUG · SIMULATE DEVICE SIGNAL</Text>
@@ -202,6 +201,7 @@ export function HomeScreen() {
           </Pressable>
         </View>
       </GlassCard>
+      */}
     </ScreenBackground>
   );
 }
@@ -261,6 +261,15 @@ const styles = StyleSheet.create({
   listTitle: { color: colors.text, fontFamily: fontFamily.bodySemiBold },
   listSubtitle: { color: colors.textDim, marginTop: 4 },
   arrow: { color: colors.textMuted, fontSize: 18 },
+  helpButton: {
+    backgroundColor: colors.accent,
+    borderRadius: 16,
+    paddingVertical: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  helpButtonPressed: { opacity: 0.85 },
+  helpButtonText: { color: "#FFFFFF", fontFamily: type.button.fontFamily, fontSize: 15, letterSpacing: 2 },
   debugCard: { borderStyle: "dashed" as const, borderColor: colors.glassBorder },
   debugCopy: { color: colors.textMuted, marginTop: spacing.sm, marginBottom: spacing.md },
   severityRow: { flexDirection: "row", gap: spacing.sm },

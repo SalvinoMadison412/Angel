@@ -76,6 +76,47 @@ export async function presentCrashNotification(event: CrashEvent): Promise<void>
   });
 }
 
+// Low-importance channel on purpose — this is an ongoing status indicator,
+// not an alert, and MAX-importance heads-up behavior would be obnoxious for
+// something that's supposed to sit quietly the whole ride.
+const MONITORING_CHANNEL_ID = "crash-monitoring";
+const MONITORING_NOTIFICATION_ID = "crash-monitoring-active";
+
+async function configureMonitoringNotificationChannel(): Promise<void> {
+  if (Platform.OS !== "android") return;
+  await Notifications.setNotificationChannelAsync(MONITORING_CHANNEL_ID, {
+    name: "Crash detection active",
+    importance: Notifications.AndroidImportance.LOW,
+  });
+}
+
+/**
+ * Ongoing/sticky notification shown for as long as the sensor is connected
+ * — there's no true Android foreground service behind crash detection (see
+ * presentCrashNotification above), so this is the only signal a rider gets
+ * that monitoring is actually live while the app is backgrounded, and the
+ * sticky flag also makes it harder for Android to reclaim the process.
+ */
+export async function presentActiveMonitoringNotification(): Promise<void> {
+  await configureMonitoringNotificationChannel();
+  await Notifications.scheduleNotificationAsync({
+    identifier: MONITORING_NOTIFICATION_ID,
+    content: {
+      title: "Angel is watching the road",
+      body: "Crash detection is active.",
+      sticky: true,
+      autoDismiss: false,
+      priority: Notifications.AndroidNotificationPriority.LOW,
+    },
+    trigger: Platform.OS === "android" ? { channelId: MONITORING_CHANNEL_ID } : null,
+  });
+}
+
+/** Clears the ongoing monitoring notification — call when the sensor disconnects. */
+export async function dismissActiveMonitoringNotification(): Promise<void> {
+  await Notifications.dismissNotificationAsync(MONITORING_NOTIFICATION_ID);
+}
+
 /** Extracts the CrashEvent out of a tapped notification's payload, or null if it wasn't one of ours. */
 export function crashEventFromNotificationResponse(
   response: Notifications.NotificationResponse | null

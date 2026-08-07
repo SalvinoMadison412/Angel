@@ -12,6 +12,7 @@ import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
 import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
 import { EmergencyCountdownScreen } from "../screens/crash/EmergencyCountdownScreen";
 import { EmergencyAlertSentScreen } from "../screens/crash/EmergencyAlertSentScreen";
+import { GuardianNotifiedScreen } from "../screens/crash/GuardianNotifiedScreen";
 import { LiveIncidentScreen } from "../screens/incident/LiveIncidentScreen";
 import { ActiveTicketScreen } from "../screens/incident/ActiveTicketScreen";
 import { GuardianFormScreen } from "../screens/guardians/GuardianFormScreen";
@@ -23,7 +24,12 @@ import { useDevice } from "../hooks/useDevice";
 import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
 import { DEFAULT_COUNTDOWN_SECONDS, flushPendingDispatches, shouldTriggerAlert } from "../services/emergency";
-import { crashEventFromNotificationResponse, presentCrashNotification } from "../services/notifications";
+import {
+  crashEventFromNotificationResponse,
+  dismissActiveMonitoringNotification,
+  presentActiveMonitoringNotification,
+  presentCrashNotification,
+} from "../services/notifications";
 import { colors } from "../theme";
 
 // The animation's own on-screen time — kept in sync with AnimatedSplash's
@@ -82,6 +88,24 @@ function CrashDetectorListener() {
   // start after the failure) and again every time the app returns to the
   // foreground, since that's the natural moment connectivity is most likely
   // to have come back.
+  // Ongoing notification for as long as the real sensor is connected — see
+  // presentActiveMonitoringNotification for why this exists (no true
+  // foreground service backs BLE listening on this build). Deliberately
+  // keyed off the real hook only: the mock stream used by Home's debug
+  // panel never actually connects to anything, so it should never surface
+  // this.
+  useEffect(() => {
+    if (real.isLinked) {
+      presentActiveMonitoringNotification().catch((err) =>
+        console.warn("[notifications] failed to present monitoring notification", err)
+      );
+    } else {
+      dismissActiveMonitoringNotification().catch((err) =>
+        console.warn("[notifications] failed to dismiss monitoring notification", err)
+      );
+    }
+  }, [real.isLinked]);
+
   useEffect(() => {
     flushPendingDispatches().catch((err) => console.warn("[offline-queue] flush on mount failed", err));
     const subscription = AppState.addEventListener("change", (state) => {
@@ -167,6 +191,11 @@ function AppNavigator() {
           options={{ gestureEnabled: false }}
         />
         <Stack.Screen name="EmergencyAlertSent" component={EmergencyAlertSentScreen} />
+        <Stack.Screen
+          name="GuardianNotified"
+          component={GuardianNotifiedScreen}
+          options={{ gestureEnabled: false }}
+        />
         <Stack.Screen name="LiveIncident" component={LiveIncidentScreen} />
         <Stack.Screen name="ActiveTicket" component={ActiveTicketScreen} />
         <Stack.Screen name="GuardianForm" component={GuardianFormScreen} />

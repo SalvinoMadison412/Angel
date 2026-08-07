@@ -1,6 +1,6 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, HoloMotorcycle, PillButton, ScreenBackground, ScreenHeader, StepProgress } from "../../components";
 import { useAuth } from "../../hooks/useAuth";
 import { colors, spacing, type } from "../../theme";
@@ -45,6 +45,11 @@ export function OtpScreen() {
   };
 
   return (
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+    >
     <ScreenBackground scroll contentStyle={styles.content}>
       <ScreenHeader onBack={() => navigation.goBack()} />
       <View style={styles.progressWrap}>
@@ -106,10 +111,12 @@ export function OtpScreen() {
         style={styles.cta}
       />
     </ScreenBackground>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   content: {
     paddingBottom: spacing.xxxl,
   },

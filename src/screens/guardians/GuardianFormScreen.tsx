@@ -1,11 +1,15 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
-import { AlertMode } from "../../types/database";
 import { useGuardians } from "../../hooks/useGuardians";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
+
+// Every guardian is called — the alert-mode picker this used to expose
+// (call vs SMS-only) was removed from the UI, so every new/edited guardian
+// is saved with the same default the backend already defaults to.
+const DEFAULT_ALERT_MODE = "call" as const;
 
 export function GuardianFormScreen() {
   const navigation = useNavigation<RootStackNavigation>();
@@ -18,25 +22,40 @@ export function GuardianFormScreen() {
   const [name, setName] = useState(existing?.name ?? "");
   const [phone, setPhone] = useState(existing?.phone ?? "");
   const [relationship, setRelationship] = useState(existing?.relationship ?? "");
-  const [alertMode, setAlertMode] = useState<AlertMode>(existing?.alert_mode ?? "call");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const canSave = name.trim().length > 0 && phone.trim().length >= 10;
 
   const handleSave = async () => {
     if (!canSave) return;
-    const input = { name: name.trim(), phone: phone.trim(), relationship: relationship.trim(), alertMode };
-    if (existing) {
-      await updateGuardian.mutateAsync({ id: existing.id, input });
-    } else {
-      await addGuardian.mutateAsync(input);
+    setSaveError(null);
+    const input = {
+      name: name.trim(),
+      phone: phone.trim(),
+      relationship: relationship.trim(),
+      alertMode: existing?.alert_mode ?? DEFAULT_ALERT_MODE,
+    };
+    try {
+      if (existing) {
+        await updateGuardian.mutateAsync({ id: existing.id, input });
+      } else {
+        await addGuardian.mutateAsync(input);
+      }
+      navigation.goBack();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Couldn't save this guardian — try again.");
     }
-    navigation.goBack();
   };
 
   const handleDelete = async () => {
     if (!existing) return;
-    await removeGuardian.mutateAsync(existing.id);
-    navigation.goBack();
+    setSaveError(null);
+    try {
+      await removeGuardian.mutateAsync(existing.id);
+      navigation.goBack();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Couldn't remove this guardian — try again.");
+    }
   };
 
   return (
@@ -56,22 +75,7 @@ export function GuardianFormScreen() {
           <Field label="RELATIONSHIP" value={relationship} onChangeText={setRelationship} placeholder="Spouse" last />
         </GlassCard>
 
-        <GlassCard>
-          <Text style={[type.kicker, styles.dim]}>ALERT MODE</Text>
-          <View style={styles.modeRow}>
-            {(["call", "sms"] as AlertMode[]).map((mode) => (
-              <Pressable
-                key={mode}
-                style={[styles.modeOption, alertMode === mode && styles.modeOptionActive]}
-                onPress={() => setAlertMode(mode)}
-              >
-                <Text style={[styles.modeText, alertMode === mode && styles.modeTextActive]}>
-                  {mode === "call" ? "CALL" : "SMS ONLY"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </GlassCard>
+        {saveError && <Text style={styles.errorText}>{saveError}</Text>}
 
         <PillButton
           title={existing ? "SAVE CHANGES" : "ADD GUARDIAN"}
@@ -138,17 +142,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: colors.glassFillRaised,
   },
-  modeRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.md },
-  modeOption: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    alignItems: "center",
-    backgroundColor: colors.glassFillRaised,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  modeOptionActive: { borderColor: colors.accentBorder, backgroundColor: colors.accentMuted },
-  modeText: { color: colors.textMuted, fontFamily: type.button.fontFamily, fontSize: 12 },
-  modeTextActive: { color: colors.accent },
+  errorText: { color: colors.accent, textAlign: "center", ...type.bodySmall },
 });

@@ -1,12 +1,9 @@
-import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground } from "../../components";
 import { useDevice, useEmergencyProfile, useProfile } from "../../hooks";
-import { daysLeft, useCurrentSubscription } from "../../hooks/useSubscription";
-import { colors, fontFamily, radius, spacing, type } from "../../theme";
+import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
-import { ProfileStackNavigation } from "../../navigation/types";
 
 const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -27,12 +24,16 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
  * writes all three underlying sources (profiles, devices, emergency_profiles)
  * together and returns to view mode.
  */
+/** Strips any country-code prefix/formatting and keeps just the 10-digit local number, matching PhoneEntryScreen's stored shape. */
+function localDigits(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
 export function ProfileScreen() {
-  const navigation = useNavigation<ProfileStackNavigation>();
   const profile = useProfile();
   const emergencyProfile = useEmergencyProfile();
   const device = useDevice();
-  const { data: subscription } = useCurrentSubscription();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,7 +62,7 @@ export function ProfileScreen() {
 
   const loadPersonal = () => {
     setName(profile.data?.name ?? "");
-    setPhone(profile.data?.phone ?? "");
+    setPhone(localDigits(profile.data?.phone ?? ""));
   };
   const loadBike = () => {
     setBikeMake(device.data?.bike_make ?? "");
@@ -113,8 +114,8 @@ export function ProfileScreen() {
   const dobDisplay = dobEntered ? `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}` : "—";
 
   const nameError = showErrors && name.trim().length === 0 ? "Name can't be blank." : null;
-  const phoneError = showErrors && phone.trim().length === 0 ? "Phone number can't be blank." : null;
-  const canSave = name.trim().length > 0 && phone.trim().length > 0 && dobValid;
+  const phoneError = showErrors && phone.length !== 10 ? "Enter a valid 10-digit phone number." : null;
+  const canSave = name.trim().length > 0 && phone.length === 10 && dobValid;
 
   const handleEdit = () => {
     setJustSaved(false);
@@ -140,7 +141,7 @@ export function ProfileScreen() {
     setSaveError(null);
     try {
       await Promise.all([
-        profile.save.mutateAsync({ name: name.trim(), phone: phone.trim() }),
+        profile.save.mutateAsync({ name: name.trim(), phone: `+91${phone}` }),
         device.saveBikeInfo.mutateAsync({ bikeMake: bikeMake.trim() || null, bikeModel: bikeModel.trim() || null }),
         emergencyProfile.save.mutateAsync({
           fullName: fullName.trim() || null,
@@ -197,17 +198,23 @@ export function ProfileScreen() {
       <GlassCard>
         <Text style={[type.kicker, styles.dim]}>PHONE</Text>
         {editing ? (
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+91 98450 11204"
-            placeholderTextColor={colors.textDim}
-            keyboardType="phone-pad"
-            style={styles.input}
-            underlineColorAndroid="transparent"
-          />
+          <View style={styles.phoneRow}>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeText}>+91</Text>
+            </View>
+            <TextInput
+              value={phone}
+              onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))}
+              placeholder="98450 11204"
+              placeholderTextColor={colors.textDim}
+              keyboardType="phone-pad"
+              maxLength={10}
+              style={[styles.input, styles.phoneInput]}
+              underlineColorAndroid="transparent"
+            />
+          </View>
         ) : (
-          <Text style={styles.value}>{phone || "—"}</Text>
+          <Text style={styles.value}>{phone ? `+91 ${phone}` : "—"}</Text>
         )}
         {phoneError && <Text style={styles.fieldError}>{phoneError}</Text>}
       </GlassCard>
@@ -330,20 +337,6 @@ export function ProfileScreen() {
       </GlassCard>
 
       {editing && <PillButton title="CANCEL" variant="outline" onPress={handleCancel} disabled={saving} />}
-
-      <Pressable onPress={() => navigation.navigate("Plan")}>
-        <GlassCard style={styles.row}>
-          <View style={styles.rowInner}>
-            <View style={styles.info}>
-              <Text style={styles.name}>Plan</Text>
-              <Text style={styles.meta}>
-                {subscription ? `${subscription.tier}-MONTH · ${daysLeft(subscription.end_date)} DAYS LEFT` : "NO ACTIVE PLAN"}
-              </Text>
-            </View>
-            <Text style={styles.arrow}>→</Text>
-          </View>
-        </GlassCard>
-      </Pressable>
     </ScreenBackground>
   );
 }
@@ -373,6 +366,17 @@ const styles = StyleSheet.create({
   },
   fieldSpacing: { marginTop: spacing.md },
   multilineInput: { minHeight: 96 },
+  phoneRow: { flexDirection: "row", gap: spacing.md },
+  codeBox: {
+    marginTop: spacing.sm,
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glassFillRaised,
+  },
+  codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
+  phoneInput: { flex: 1, letterSpacing: 2 },
   dobRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
   dobInput: { flex: 1, marginTop: 0, textAlign: "center" },
   dobInputYear: { flex: 1.6, marginTop: 0, textAlign: "center" },
@@ -391,10 +395,4 @@ const styles = StyleSheet.create({
   bloodTextActive: { color: colors.accent },
   saved: { color: colors.accent, textAlign: "center", ...type.bodySmall },
   error: { color: colors.accent, textAlign: "center", ...type.bodySmall },
-  row: {},
-  rowInner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  info: { flex: 1 },
-  name: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 15 },
-  meta: { color: colors.textDim, fontSize: 12, marginTop: 4, fontFamily: type.label.fontFamily },
-  arrow: { color: colors.textMuted, fontSize: 18 },
 });

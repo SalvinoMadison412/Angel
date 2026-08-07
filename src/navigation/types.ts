@@ -40,6 +40,9 @@ export type RootStackParamList = {
   // Severity-1 events only — see shouldTriggerAlert in emergencyPipeline.ts.
   EmergencyCountdown: CrashEvent;
   EmergencyAlertSent: { guardianNames: string[] };
+  // Rider-initiated "I NEED HELP NOW" from HomeScreen — no CrashEvent behind
+  // it, see GuardianNotifiedScreen.tsx.
+  GuardianNotified: undefined;
   GuardianForm: { guardianId?: string };
   // TEMP DIAGNOSTIC — remove once the calibration_complete investigation is
   // resolved. See screens/debug/DiagnosticScreen.tsx.

@@ -1,5 +1,3 @@
-import * as Location from "expo-location";
-import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
@@ -7,14 +5,9 @@ import { useDevice, useEmergencyProfile, useGuardians, useProfile } from "../../
 import { requestCrashNotificationPermission } from "../../services/notifications";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
+import { LocationPermissionScreen } from "./LocationPermissionScreen";
 
-// Local-only — not a Supabase column, since existing tables can't be
-// altered for this. Nothing reads this yet; it's captured so it's available
-// later without re-prompting, same reasoning as the permission request
-// itself (see advanceTo below).
-const LOCATION_PERMISSION_STATUS_KEY = "onboardingLocationPermissionStatus";
-
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const MAX_CONTACTS = 3;
 
@@ -53,21 +46,12 @@ export function OnboardingScreen() {
 
   const advanceTo = async (next: number) => {
     if (next > TOTAL_STEPS) {
-      // Best-effort, asked once here rather than for the first time mid-
-      // emergency — a crash alert's Google Maps link needs this, and a
-      // permission dialog is the last thing a rider should see while a
-      // countdown is running. Declining doesn't block onboarding; the
-      // emergency pipeline re-requests at alert time as a fallback (see
-      // captureCurrentLocation in emergencyPipeline.ts).
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        await SecureStore.setItemAsync(LOCATION_PERMISSION_STATUS_KEY, status);
-      } catch (err) {
-        console.warn("[onboarding] failed to request location permission", err);
-      }
-      // Same reasoning as location above — a crash notification while
-      // backgrounded is useless if POST_NOTIFICATIONS was never granted,
-      // and mid-emergency is the wrong time to ask for the first time.
+      // Location itself was already asked for (with rationale) by
+      // LocationPermissionScreen at step 5 — only the notification
+      // permission remains here. Same reasoning as that screen: a crash
+      // notification while backgrounded is useless if POST_NOTIFICATIONS
+      // was never granted, and mid-emergency is the wrong time to ask for
+      // the first time.
       try {
         await requestCrashNotificationPermission();
       } catch (err) {
@@ -91,6 +75,7 @@ export function OnboardingScreen() {
       {step === 2 && <MedicalStep emergencyProfile={emergencyProfile} onContinue={() => advanceTo(3)} />}
       {step === 3 && <ContactsStep guardians={guardians} onContinue={() => advanceTo(4)} />}
       {step === 4 && <BikeStep device={device} onContinue={() => advanceTo(5)} />}
+      {step === 5 && <LocationPermissionScreen onContinue={() => advanceTo(6)} />}
     </ScreenBackground>
   );
 }

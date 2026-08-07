@@ -1,6 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, HoloMotorcycle, PillButton, ScreenBackground } from "../../components";
 import { useAuth } from "../../hooks/useAuth";
 import { colors, spacing, type } from "../../theme";
@@ -43,69 +43,76 @@ export function PhoneEntryScreen() {
   };
 
   return (
-    <ScreenBackground scroll contentStyle={styles.content}>
-      <Text style={[type.wordmark, styles.wordmark]}>ANGEL</Text>
-      <Text style={[type.kicker, styles.kicker]}>CRASH DETECTION SYSTEM</Text>
-      <Text style={[type.body, styles.subtitle]}>
-        Someone is watching the road with you. Sign in to arm your device.
-      </Text>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+    >
+      <ScreenBackground scroll contentStyle={styles.content}>
+        <Text style={[type.wordmark, styles.wordmark]}>ANGEL</Text>
+        <Text style={[type.kicker, styles.kicker]}>CRASH DETECTION SYSTEM</Text>
+        <Text style={[type.body, styles.subtitle]}>
+          Someone is watching the road with you. Sign in to arm your device.
+        </Text>
 
-      <View style={styles.motif}>
-        <HoloMotorcycle dim width={260} height={140} />
-      </View>
+        <View style={styles.motif}>
+          <HoloMotorcycle dim width={260} height={140} />
+        </View>
 
-      <PillButton
-        title="CONTINUE WITH GOOGLE"
-        variant="outline"
-        onPress={handleGoogleSignIn}
-        loading={googleLoading}
-        style={styles.googleButton}
-      />
-      {googleError ? <Text style={styles.error}>{googleError}</Text> : null}
+        <PillButton
+          title="CONTINUE WITH GOOGLE"
+          variant="outline"
+          onPress={handleGoogleSignIn}
+          loading={googleLoading}
+          style={styles.googleButton}
+        />
+        {googleError ? <Text style={styles.error}>{googleError}</Text> : null}
 
-      <View style={styles.dividerRow}>
-        <View style={styles.dividerLine} />
-        <Text style={[type.kicker, styles.dividerText]}>OR</Text>
-        <View style={styles.dividerLine} />
-      </View>
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={[type.kicker, styles.dividerText]}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
 
-      <GlassCard style={styles.formCard}>
-        <Text style={[type.kicker, styles.fieldLabel]}>MOBILE NUMBER</Text>
-        <View style={styles.phoneRow}>
-          <View style={styles.codeBox}>
-            <Text style={styles.codeText}>+91</Text>
-            <Text style={styles.chevron}>▾</Text>
+        <GlassCard style={styles.formCard}>
+          <Text style={[type.kicker, styles.fieldLabel]}>MOBILE NUMBER</Text>
+          <View style={styles.phoneRow}>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeText}>+91</Text>
+              <Text style={styles.chevron}>▾</Text>
+            </View>
+            <TextInput
+              value={phone}
+              onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))}
+              placeholder="00000 00000"
+              placeholderTextColor={colors.textDim}
+              keyboardType="number-pad"
+              style={styles.phoneInput}
+              maxLength={10}
+              underlineColorAndroid="transparent"
+            />
           </View>
-          <TextInput
-            value={phone}
-            onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))}
-            placeholder="00000 00000"
-            placeholderTextColor={colors.textDim}
-            keyboardType="number-pad"
-            style={styles.phoneInput}
-            maxLength={10}
-            underlineColorAndroid="transparent"
-          />
-        </View>
-        <View style={styles.metaRow}>
-          <Text style={[type.label, styles.metaText]}>OTP VIA SMS</Text>
-          <Text style={[type.label, styles.metaText]}>{digits.length} / 10</Text>
-        </View>
-      </GlassCard>
+          <View style={styles.metaRow}>
+            <Text style={[type.label, styles.metaText]}>OTP VIA SMS</Text>
+            <Text style={[type.label, styles.metaText]}>{digits.length} / 10</Text>
+          </View>
+        </GlassCard>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <PillButton title="SEND OTP" onPress={handleSend} disabled={!canSubmit} loading={loading} style={styles.cta} />
+        <PillButton title="SEND OTP" onPress={handleSend} disabled={!canSubmit} loading={loading} style={styles.cta} />
 
-      <Text style={styles.legal}>
-        By continuing you agree to Angel's <Text style={styles.link}>Terms</Text> and{" "}
-        <Text style={styles.link}>Privacy Policy</Text>, and to emergency contact sharing during a confirmed crash.
-      </Text>
-    </ScreenBackground>
+        <Text style={styles.legal}>
+          By continuing you agree to Angel's <Text style={styles.link}>Terms</Text> and{" "}
+          <Text style={styles.link}>Privacy Policy</Text>, and to emergency contact sharing during a confirmed crash.
+        </Text>
+      </ScreenBackground>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   content: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxxl,
