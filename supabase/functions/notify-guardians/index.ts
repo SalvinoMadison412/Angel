@@ -5,9 +5,10 @@
 // 1. Database Webhook on `insert` to public.crash_tickets (Dashboard →
 //    Database → Webhooks → new hook → table crash_tickets → Insert →
 //    target this function). This is the main India-stack crash alert path:
-//    the instant a crash_tickets row exists, guardians get a WhatsApp
-//    message (Twilio) and a voice call (Exotel), and delivery status is
-//    written back onto the crash_tickets row. Auth: Database Webhooks
+//    the instant a crash_tickets row exists, guardians get a WhatsApp text
+//    alert, a WhatsApp location pin (both Twilio), and a voice call
+//    (Exotel), and delivery status is written back onto the crash_tickets
+//    row. Auth: Database Webhooks
 //    created via the Dashboard's "Supabase Edge Functions" target send the
 //    project's service_role key as a Bearer token by default — this
 //    function checks that header against SUPABASE_SERVICE_ROLE_KEY
@@ -98,6 +99,48 @@ async function sendTwilioWhatsApp(guardianPhone: string, message: string): Promi
   }
 }
 
+// Sends a native WhatsApp location pin (tappable straight into Google/Apple
+// Maps) as a second message, right after the text alert. Twilio renders
+// this from PersistentAction: "geo:{lat},{lng}|{label}" rather than a
+// Content Template, so no separate DLT/template approval is needed. Purely
+// best-effort — the text alert above already carries the maps link, so a
+// failure here must never fail the overall guardian-notify flow.
+async function sendTwilioWhatsAppLocation(guardianPhone: string, riderName: string, lat: number, lng: number): Promise<boolean> {
+  const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const whatsappNumber = Deno.env.get("TWILIO_WHATSAPP_NUMBER");
+  if (!accountSid || !authToken || !whatsappNumber) {
+    console.warn("[notify-guardians] Twilio WhatsApp not configured — skipping location message");
+    return false;
+  }
+
+  try {
+    const form = new URLSearchParams({
+      From: `whatsapp:${whatsappNumber}`,
+      To: `whatsapp:+91${guardianPhone.replace(/\D/g, "").slice(-10)}`,
+      PersistentAction: `geo:${lat},${lng}|${riderName}'s last location`,
+      Body: `📍 ${riderName}'s last known location`,
+    });
+
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form.toString(),
+    });
+    if (!res.ok) {
+      console.warn(`[notify-guardians] Twilio WhatsApp location ${res.status}: ${await res.text()}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("[notify-guardians] Twilio WhatsApp location request failed", err);
+    return false;
+  }
+}
+
 async function initiateExotelCall(guardianPhone: string, message: string): Promise<boolean> {
   const apiKey = Deno.env.get("EXOTEL_API_KEY");
   const apiToken = Deno.env.get("EXOTEL_API_TOKEN");
@@ -176,7 +219,21 @@ async function alertGuardians(
   await Promise.all(
     guardians.map(async (guardian) => {
       const [whatsappSent, callInitiated] = await Promise.all([
-        sendTwilioWhatsApp(guardian.phone_number, message),
+        (async () => {
+          const sent = await sendTwilioWhatsApp(guardian.phone_number, message);
+          // Second message, sent right after the text alert — a native
+          // WhatsApp location pin guardians can tap straight into Maps.
+          // Attempted regardless of whether the text alert itself
+          // succeeded, and never lets a failure here surface past a
+          // warning (see sendTwilioWhatsAppLocation's comment).
+          if (lat !== null && lng !== null) {
+            const locationSent = await sendTwilioWhatsAppLocation(guardian.phone_number, riderName, lat, lng);
+            if (!locationSent) {
+              console.warn(`[notify-guardians] failed to send WhatsApp location pin to guardian ${guardian.phone_number}`);
+            }
+          }
+          return sent;
+        })(),
         initiateExotelCall(guardian.phone_number, message),
       ]);
       if (whatsappSent) smsOk += 1;
