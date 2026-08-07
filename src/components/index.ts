@@ -14,4 +14,5 @@ export * from "./SchematicRouteMap";
 export * from "./RouteMap";
 export * from "./ScreenBackground";
 export * from "./TabBarIcon";
+export * from "./ShieldPinIcon";
 export * from "./AnimatedSplash";

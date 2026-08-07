@@ -1,8 +1,8 @@
 import { useNavigation } from "@react-navigation/native";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { GlassCard, HoloMotorcycle, ScreenBackground, SeverityMeter, StatTile } from "../../components";
-import { useCrashDetector, useCurrentSubscription, useGuardians } from "../../hooks";
+import { useCrashDetector, useCurrentSubscription, useGuardians, useLocationPermissionStatus } from "../../hooks";
 import { daysLeft } from "../../hooks/useSubscription";
 import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
 import { colors, fontFamily, severityColor, spacing, type } from "../../theme";
@@ -31,6 +31,7 @@ export function HomeScreen() {
   const { data: subscription } = useCurrentSubscription();
   const { isLinked, isReconnecting, telemetry, lastEvent } = useCrashDetector();
   const { simulateCrash, simulateFault, clearSimulatedFault } = useCrashDetector({ mock: true });
+  const { granted: locationGranted } = useLocationPermissionStatus();
 
   // Driven by the live BLE connection state, not the device row's persisted
   // `pairing_status` — that flag reflects setup history and goes stale the
@@ -60,6 +61,16 @@ export function HomeScreen() {
           <Text style={[type.kicker, styles.statusText]}>{connectionLabel}</Text>
         </View>
       </View>
+
+      {locationGranted === false && (
+        <Pressable onPress={() => Linking.openSettings()}>
+          <View style={styles.locationBanner}>
+            <Text style={styles.locationBannerText}>
+              ⚠️ Location access is off — guardians won't know where to find you if you crash. Tap to enable.
+            </Text>
+          </View>
+        </Pressable>
+      )}
 
       <GlassCard style={styles.statusCard}>
         <Text style={[type.kicker, styles.dimText]}>STATUS</Text>
@@ -218,6 +229,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   wordmark: { color: colors.text, fontSize: 18 },
+  locationBanner: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,176,32,0.5)",
+    backgroundColor: "rgba(255,176,32,0.12)",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  locationBannerText: { ...type.bodySmall, color: "#FFB020" },
   statusPill: {
     flexDirection: "row",
     alignItems: "center",

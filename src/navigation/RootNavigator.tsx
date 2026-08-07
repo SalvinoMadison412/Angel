@@ -7,6 +7,7 @@ import { AppTabs } from "./AppTabs";
 import { AuthNavigator } from "./AuthNavigator";
 import { AnimatedSplash } from "../components";
 import { OnboardingScreen } from "../screens/onboarding/OnboardingScreen";
+import { LocationPermissionScreen } from "../screens/location/LocationPermissionScreen";
 import { DeviceSetupScreen } from "../screens/device/DeviceSetupScreen";
 import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
 import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
@@ -23,7 +24,13 @@ import { useDevice } from "../hooks/useDevice";
 import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
 import { DEFAULT_COUNTDOWN_SECONDS, flushPendingDispatches, shouldTriggerAlert } from "../services/emergency";
-import { crashEventFromNotificationResponse, presentCrashNotification } from "../services/notifications";
+import {
+  crashEventFromNotificationResponse,
+  hideMonitoringNotification,
+  presentCrashNotification,
+  showMonitoringNotification,
+} from "../services/notifications";
+import { getLocationPermissionAsked } from "../lib/locationPermissionStorage";
 import { colors } from "../theme";
 
 // The animation's own on-screen time — kept in sync with AnimatedSplash's
@@ -75,6 +82,26 @@ function CrashDetectorListener() {
   const mock = useCrashDetector({ mock: true });
   const { data: device, setCalibrated } = useDevice();
   const handledReceivedAt = useRef<number | null>(null);
+
+  // Persistent "Angel is active" notification — shown whenever the real
+  // sensor is connected (the closest existing signal to "detection is
+  // running," since there's no separate pause control), hidden the moment
+  // it disconnects. See services/notifications/activeMonitoringNotification.ts
+  // for why this is a sticky notification and not a true foreground service.
+  useEffect(() => {
+    if (real.isLinked) {
+      showMonitoringNotification().catch((err) => console.warn("[monitoring-notification] show failed", err));
+      // Covers CrashDetectorListener itself unmounting (e.g. sign-out)
+      // while still linked — the notification shouldn't outlive the screen
+      // that's tracking connection state for it. Only registered while
+      // actually linked, so a plain false -> unmount doesn't also fire an
+      // already-redundant hide.
+      return () => {
+        hideMonitoringNotification().catch((err) => console.warn("[monitoring-notification] hide on unmount failed", err));
+      };
+    }
+    hideMonitoringNotification().catch((err) => console.warn("[monitoring-notification] hide failed", err));
+  }, [real.isLinked]);
 
   // A crash dispatch that failed outright while offline (see
   // CrashAlertScreen's dispatch()) gets queued to disk rather than lost —
@@ -189,6 +216,12 @@ export function RootNavigator() {
   const [splashUnmounted, setSplashUnmounted] = useState(false);
   const splashOpacity = useRef(new Animated.Value(1)).current;
 
+  // `null` until read from SecureStore — see the same "don't treat unknown
+  // as false" reasoning as reduceMotion above. Only actually read once
+  // session + onboarding are resolved (below), since there's no point
+  // checking it before we even know we'll need it.
+  const [locationPromptAsked, setLocationPromptAsked] = useState<boolean | null>(null);
+
   useEffect(() => {
     let mounted = true;
     AccessibilityInfo.isReduceMotionEnabled()
@@ -206,11 +239,26 @@ export function RootNavigator() {
     return () => clearTimeout(timer);
   }, [reduceMotion]);
 
-  // Not signed in yet (auth resolving) or signed in but the profile row
-  // hasn't loaded yet — either way we don't know which of Auth/Onboarding/
-  // App to show, so this counts the same as "still resolving" for the
-  // splash gate.
-  const stillResolving = initializing || (Boolean(session) && profile.isLoading);
+  const needsOnboarding = Boolean(session) && Boolean(profile.data) && !profile.data?.onboarding_completed;
+  const pastOnboarding = Boolean(session) && Boolean(profile.data?.onboarding_completed);
+
+  // Read once we actually know onboarding is done — no point checking
+  // earlier, and re-checking on every render would be wasted SecureStore
+  // reads for a flag that only ever flips true within this session.
+  useEffect(() => {
+    if (!pastOnboarding || locationPromptAsked !== null) return;
+    getLocationPermissionAsked().then(setLocationPromptAsked);
+  }, [pastOnboarding, locationPromptAsked]);
+
+  // Not signed in yet (auth resolving), signed in but the profile row
+  // hasn't loaded yet, or past onboarding but still waiting on the location
+  // prompt flag — any of these mean we don't yet know which of
+  // Auth/Onboarding/LocationPrompt/App to show, so all count as "still
+  // resolving" for the splash gate.
+  const stillResolving =
+    initializing ||
+    (Boolean(session) && profile.isLoading) ||
+    (pastOnboarding && locationPromptAsked === null);
 
   useEffect(() => {
     // Concurrent with the animation, not after it — this only ever adds
@@ -232,11 +280,19 @@ export function RootNavigator() {
     }).start(() => setSplashUnmounted(true));
   }, [showSplash, splashUnmounted, splashOpacity]);
 
-  const needsOnboarding = Boolean(session) && Boolean(profile.data) && !profile.data?.onboarding_completed;
+  const needsLocationPrompt = pastOnboarding && locationPromptAsked === false;
 
   return (
     <NavigationContainer theme={navTheme}>
-      {!session ? <AuthNavigator /> : needsOnboarding ? <OnboardingScreen /> : <AppNavigator />}
+      {!session ? (
+        <AuthNavigator />
+      ) : needsOnboarding ? (
+        <OnboardingScreen />
+      ) : needsLocationPrompt ? (
+        <LocationPermissionScreen onDone={() => setLocationPromptAsked(true)} />
+      ) : (
+        <AppNavigator />
+      )}
       {!splashUnmounted && (
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
           <AnimatedSplash reduceMotion={!!reduceMotion} />

@@ -6,5 +6,6 @@ export * from "./useResponders";
 export * from "./useIncident";
 export * from "./useSubscription";
 export * from "./useLocation";
+export * from "./useLocationPermissionStatus";
 export * from "./useCrashDetector";
 export * from "./useEmergencyProfile";

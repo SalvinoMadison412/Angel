@@ -32,7 +32,8 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Angel uses your location to show responders where to find you during a crash alert."
+          "locationAlwaysAndWhenInUsePermission": "Angel uses your location to show responders where to find you during a crash alert.",
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       [
