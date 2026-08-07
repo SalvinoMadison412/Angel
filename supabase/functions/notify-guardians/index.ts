@@ -2,14 +2,18 @@
 //
 // Called by the app the moment EmergencyCountdownScreen's countdown expires
 // without the rider tapping "I'm okay" (see sendGuardianAlert in
-// src/services/emergency/emergencyPipeline.ts). Sends one SMS via Twilio to
-// every guardian on record for the rider, containing who, when, how severe,
-// and a Google Maps link to their last known location.
+// src/services/emergency/emergencyPipeline.ts). Sends one WhatsApp message
+// via Twilio to every guardian on record for the rider, containing who,
+// when, how severe, and a Google Maps link to their last known location.
 //
 // Required secrets (set via `supabase secrets set` or the dashboard):
 //   TWILIO_ACCOUNT_SID
 //   TWILIO_AUTH_TOKEN
-//   TWILIO_FROM_NUMBER   — an SMS-capable Twilio number, e.g. "+15551234567"
+//   TWILIO_WHATSAPP_NUMBER   — a WhatsApp-enabled Twilio number, e.g.
+//                              "+14155238886" (no "whatsapp:" prefix here —
+//                              that's added per-request below). Guardians
+//                              must have opted in / joined the sandbox
+//                              before Twilio will deliver to them.
 //
 // SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided automatically by
 // the Edge Functions runtime — not set manually.
@@ -36,7 +40,7 @@ interface NotifyGuardiansBody {
   timestamp: string;
   lat: number | null;
   lng: number | null;
-  // Which alert path triggered this — changes the SMS copy below.
+  // Which alert path triggered this — changes the message copy below.
   // "missed_checkin": severity-1 countdown expired with no rider response.
   // "confirmed_crash": severity 2-5, already dispatched to a responder.
   // Defaults to "missed_checkin" so existing callers (severity-1 path,
@@ -78,10 +82,10 @@ Deno.serve(async (req) => {
 
     const twilioSid = Deno.env.get("TWILIO_ACCOUNT_SID");
     const twilioToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-    const twilioFrom = Deno.env.get("TWILIO_FROM_NUMBER");
+    const twilioFrom = Deno.env.get("TWILIO_WHATSAPP_NUMBER");
     if (!twilioSid || !twilioToken || !twilioFrom) {
       return jsonResponse(
-        { error: "Twilio is not configured — set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER" },
+        { error: "Twilio is not configured — set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_NUMBER" },
         500
       );
     }
@@ -143,7 +147,11 @@ Deno.serve(async (req) => {
     await Promise.all(
       list.map(async (guardian) => {
         try {
-          const form = new URLSearchParams({ To: guardian.phone, From: twilioFrom, Body: message });
+          const form = new URLSearchParams({
+            To: `whatsapp:${guardian.phone}`,
+            From: `whatsapp:${twilioFrom}`,
+            Body: message,
+          });
           const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
             method: "POST",
             headers: {
