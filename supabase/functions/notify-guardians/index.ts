@@ -9,9 +9,13 @@
 // Required secrets (set via `supabase secrets set` or the dashboard):
 //   TWILIO_ACCOUNT_SID
 //   TWILIO_AUTH_TOKEN
-//   TWILIO_WHATSAPP_NUMBER   — a WhatsApp-enabled Twilio number, e.g.
-//                              "+14155238886" (no "whatsapp:" prefix here —
-//                              that's added per-request below). Guardians
+//   TWILIO_WHATSAPP_NUMBER   — a WhatsApp-enabled Twilio number, already
+//                              prefixed, e.g. "whatsapp:+14155238886" (the
+//                              sandbox number as given in the Twilio
+//                              console). Used as-is for From below — do
+//                              not add another "whatsapp:" prefix, Twilio
+//                              rejects the doubled-up value with error
+//                              21212 ("not a valid phone number"). Guardians
 //                              must have opted in / joined the sandbox
 //                              before Twilio will deliver to them.
 //
@@ -162,8 +166,8 @@ Deno.serve(async (req) => {
       list.map(async (guardian) => {
         try {
           const form = new URLSearchParams({
+            From: twilioFrom,
             To: `whatsapp:${toE164(guardian.phone)}`,
-            From: `whatsapp:${twilioFrom}`,
             Body: message,
           });
           const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
