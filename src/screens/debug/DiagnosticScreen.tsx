@@ -11,10 +11,13 @@ import { RootStackNavigation } from "../../navigation/types";
 // notification arrives (same useCrashDetector() hook every other screen
 // uses — nothing special-cased here). Built to answer one question
 // directly, on-device: is data from the Arduino actually reaching the app
-// at all. Remove once the calibration_complete investigation is resolved.
+// at all. Originally built for the calibration_complete investigation;
+// also covers telemetry now — if this stays empty while isLinked is true,
+// see the MTU/truncation diagnostics in crashDetectorBle.ts's
+// handleNotification (logcat tag [BLE-PACKET]).
 export function DiagnosticScreen() {
   const navigation = useNavigation<RootStackNavigation>();
-  const { isLinked, isReconnecting, lastEvent, fault, calibrationConfirmation } = useCrashDetector();
+  const { isLinked, isReconnecting, telemetry, lastEvent, fault, calibrationConfirmation } = useCrashDetector();
 
   return (
     <ScreenBackground scroll contentStyle={styles.content}>
@@ -29,6 +32,23 @@ export function DiagnosticScreen() {
         <Section title="CONNECTION">
           <Row label="isLinked" value={String(isLinked)} />
           <Row label="isReconnecting" value={String(isReconnecting)} />
+        </Section>
+
+        <Section title="LAST TELEMETRY (type: telemetry)">
+          {telemetry ? (
+            <>
+              <Row label="impactG" value={telemetry.impactG.toFixed(3)} />
+              <Row label="gyroDps" value={telemetry.gyroDps.toFixed(1)} />
+              <Row label="tilt" value={telemetry.tilt.toFixed(1)} />
+              <Row label="still" value={String(telemetry.still)} />
+              <Row label="calibrated" value={String(telemetry.calibrated)} />
+              <Row label="receivedAt" value={new Date(telemetry.receivedAt).toLocaleTimeString("en-IN", { hour12: false })} />
+            </>
+          ) : (
+            <Text style={styles.empty}>
+              {isLinked ? "Connected, but no telemetry received yet — check logcat for [BLE-PACKET]" : "Nothing received yet"}
+            </Text>
+          )}
         </Section>
 
         <Section title="LAST CRASH EVENT (type: crash)">

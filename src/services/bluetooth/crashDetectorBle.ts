@@ -40,6 +40,17 @@ const NOTIFY_SETTLE_MS = 500;
 const REQUESTED_MTU = 247;
 // Value is arbitrary — the device only cares that a write happened.
 const CALIBRATE_TRIGGER_BYTE = "\x01";
+// BLE notifications (unlike long reads/writes) are never fragmented and
+// reassembled by the stack — a payload longer than (negotiated MTU - 3)
+// bytes is silently truncated by the radio before the app ever sees it.
+// The largest message this device sends (a "crash" event, ~125 bytes JSON)
+// needs an MTU well above the 23-byte Android/BLE default. If requestMTU
+// above didn't actually stick (a known flaky area on some Android/BLE
+// stack combinations — see the calibration_complete investigation this
+// file's diagnostics were built for), every telemetry/crash notification
+// gets cut off mid-JSON and fails to parse, while the connection itself
+// stays completely healthy — "connected" but no data ever arrives.
+const MIN_SAFE_MTU_FOR_LARGEST_MESSAGE = 150;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -158,6 +169,10 @@ export class CrashDetectorBleService implements CrashDetectorBle {
   // disconnect so a reconnect can't inherit a stale "settled" state from a
   // previous connection.
   private notifySettled = false;
+  // Whatever device.mtu reported after the requestMTU attempt in
+  // performConnect() — read by handleNotification() purely for diagnostic
+  // logging, see MIN_SAFE_MTU_FOR_LARGEST_MESSAGE above.
+  private negotiatedMtu = 23;
   private disconnectSubscription: Subscription | null = null;
   private stateListeners = new Set<(state: ConnectionState, errorMessage?: string) => void>();
   private telemetryListeners = new Set<(reading: TelemetryReading) => void>();
@@ -355,6 +370,20 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       } catch (err) {
         bleOpLog(`GATT requestMTU(${deviceId}) — FAILED, continuing at mtu=${device.mtu}:`, err instanceof Error ? err.message : err);
       }
+      this.negotiatedMtu = device.mtu;
+      if (device.mtu < MIN_SAFE_MTU_FOR_LARGEST_MESSAGE) {
+        // Not fatal — connection proceeds either way — but this is the
+        // single most useful line in the whole log if telemetry/crash data
+        // never shows up despite a healthy "connected" state. See
+        // MIN_SAFE_MTU_FOR_LARGEST_MESSAGE above.
+        bleOpLog(
+          `⚠ negotiated mtu=${device.mtu} is BELOW the ${MIN_SAFE_MTU_FOR_LARGEST_MESSAGE}-byte safety margin — ` +
+            `telemetry/crash notifications will likely arrive truncated and fail to parse`
+        );
+        console.warn(
+          `[ble] negotiated MTU (${device.mtu}) may be too small for telemetry/crash payloads — expect truncated/dropped notifications`
+        );
+      }
 
       bleOpLog(`GATT discoverAllServicesAndCharacteristics(${deviceId}) — issuing`);
       device = await device.discoverAllServicesAndCharacteristics();
@@ -517,7 +546,10 @@ export class CrashDetectorBleService implements CrashDetectorBle {
     if (!characteristic) return;
 
     const rawBase64 = characteristic.value;
-    blePacketLog(`characteristic=${characteristic.uuid} raw base64:`, rawBase64);
+    blePacketLog(
+      `characteristic=${characteristic.uuid} negotiatedMtu=${this.negotiatedMtu} raw base64 (${rawBase64?.length ?? 0} chars):`,
+      rawBase64
+    );
     if (!rawBase64) {
       blePacketLog(`empty characteristic value — dropping`);
       return;
@@ -531,7 +563,17 @@ export class CrashDetectorBleService implements CrashDetectorBle {
       console.warn("[ble] malformed BLE payload (bad base64), dropping", err);
       return;
     }
-    blePacketLog(`decoded string:`, decoded);
+    blePacketLog(`decoded string (${decoded.length} bytes):`, decoded);
+    // A payload cut off mid-JSON by an insufficient MTU (see
+    // MIN_SAFE_MTU_FOR_LARGEST_MESSAGE) never has a closing brace — this is
+    // the single clearest signal that the radio truncated the notification
+    // before the JSON parse below even runs.
+    if (!decoded.trimEnd().endsWith("}")) {
+      blePacketLog(
+        `⚠ decoded payload doesn't end with "}" — looks TRUNCATED (negotiatedMtu=${this.negotiatedMtu}, ` +
+          `max safe payload ≈${this.negotiatedMtu - 3} bytes, this payload is ${decoded.length} bytes)`
+      );
+    }
 
     let parsed: unknown;
     try {
