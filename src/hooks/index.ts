@@ -5,5 +5,6 @@ export * from "./useGuardians";
 export * from "./useIncident";
 export * from "./useSubscription";
 export * from "./useLocation";
+export * from "./useLocationPermission";
 export * from "./useCrashDetector";
 export * from "./useEmergencyProfile";

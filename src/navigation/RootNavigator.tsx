@@ -23,6 +23,7 @@ import { useDevice } from "../hooks/useDevice";
 import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
 import { DEFAULT_COUNTDOWN_SECONDS, flushPendingDispatches, shouldTriggerAlert } from "../services/emergency";
+import { refreshLocationPermissionStatus } from "../services/location/locationTracking";
 import {
   crashEventFromNotificationResponse,
   dismissActiveMonitoringNotification,
@@ -176,6 +177,26 @@ function CrashDetectorListener() {
   return null;
 }
 
+// Re-checks the OS-level location permission on mount (covers a relaunch
+// after a rider already granted it in a previous session — starts the live
+// watch again immediately) and on every app-foreground resume (covers a
+// rider revoking it from system Settings while the app was backgrounded,
+// which the app is never otherwise told about). See locationTracking.ts —
+// this is the only place that drives refreshLocationPermissionStatus();
+// the Home screen warning banner and crash-time location capture just read
+// whatever it last observed.
+function LocationPermissionMonitor() {
+  useEffect(() => {
+    refreshLocationPermissionStatus();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshLocationPermissionStatus();
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return null;
+}
+
 function AppNavigator() {
   return (
     <>
@@ -200,6 +221,7 @@ function AppNavigator() {
         <Stack.Screen name="Diagnostic" component={DiagnosticScreen} />
       </Stack.Navigator>
       <CrashDetectorListener />
+      <LocationPermissionMonitor />
     </>
   );
 }

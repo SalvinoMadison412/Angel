@@ -3,6 +3,7 @@ import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { CrashEvent } from "../bluetooth";
 import { MedicalSnapshot, notificationService } from "../notifications";
+import { getLastKnownCoords } from "../location/locationTracking";
 import { Guardian, Incident } from "../../types/database";
 
 export const DEFAULT_COUNTDOWN_SECONDS = 10;
@@ -49,8 +50,18 @@ async function invokeNotifyGuardians(input: {
 
 // Best-effort GPS capture shared by both alert paths below — never blocks
 // or throws past this function; a crash alert must still go out even if
-// location permission was denied or the fix times out.
+// location permission was denied or the fix times out. Prefers the cached
+// fix from the live watch (locationTracking.ts, running continuously once
+// permission is granted — see LocationPermissionScreen/RootNavigator) so
+// this resolves instantly instead of waiting on a fresh GPS fix at exactly
+// the moment that matters least to be slow. Falls back to a fresh
+// getCurrentPositionAsync() only if no cached fix exists yet (e.g. the
+// watch only just started, or permission was granted this same session
+// before a fix had time to arrive).
 async function captureCurrentLocation(): Promise<{ lat: number | null; lng: number | null }> {
+  const cached = getLastKnownCoords();
+  if (cached) return cached;
+
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") return { lat: null, lng: null };

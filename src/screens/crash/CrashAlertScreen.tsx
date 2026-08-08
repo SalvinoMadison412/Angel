@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
 import { useAuth, useDevice, useGuardians } from "../../hooks";
 import { cancelCrashEvent, confirmIncident, queuePendingDispatch } from "../../services/emergency";
+import { getLastKnownCoords } from "../../services/location/locationTracking";
 import { supabase } from "../../lib/supabase";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
@@ -50,17 +51,27 @@ export function CrashAlertScreen() {
     ticketPromiseRef.current = (async (): Promise<string | null> => {
       if (!session?.user.id || severity < 2) return null;
 
+      // Prefers the cached fix from the live watch (locationTracking.ts) —
+      // instant, no GPS wait — falling back to a fresh fix only if the
+      // watch hasn't produced one yet. See captureCurrentLocation in
+      // emergencyPipeline.ts for the same pattern.
       let riderLat: number | null = null;
       let riderLng: number | null = null;
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === "granted") {
-          const position = await Location.getCurrentPositionAsync({});
-          riderLat = position.coords.latitude;
-          riderLng = position.coords.longitude;
+      const cached = getLastKnownCoords();
+      if (cached) {
+        riderLat = cached.lat;
+        riderLng = cached.lng;
+      } else {
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === "granted") {
+            const position = await Location.getCurrentPositionAsync({});
+            riderLat = position.coords.latitude;
+            riderLng = position.coords.longitude;
+          }
+        } catch (err) {
+          console.warn("[crash-ticket] failed to capture location", err);
         }
-      } catch (err) {
-        console.warn("[crash-ticket] failed to capture location", err);
       }
 
       try {

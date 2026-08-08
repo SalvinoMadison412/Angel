@@ -1,8 +1,8 @@
 import { useNavigation } from "@react-navigation/native";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { GlassCard, HoloMotorcycle, ScreenBackground, SeverityMeter, StatTile } from "../../components";
-import { useCrashDetector, useGuardians } from "../../hooks";
+import { useCrashDetector, useGuardians, useLocationPermission } from "../../hooks";
 import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
 import { colors, fontFamily, severityColor, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
@@ -27,6 +27,7 @@ const formatReadingTime = (receivedAt: number) => new Date(receivedAt).toLocaleT
 export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: guardians } = useGuardians();
+  const locationPermission = useLocationPermission();
   const { isLinked, isReconnecting, telemetry, lastEvent } = useCrashDetector();
   const { simulateCrash, simulateFault, clearSimulatedFault } = useCrashDetector({ mock: true });
 
@@ -58,6 +59,16 @@ export function HomeScreen() {
           <Text style={[type.kicker, styles.statusText]}>{connectionLabel}</Text>
         </View>
       </View>
+
+      {locationPermission !== "granted" && (
+        <Pressable onPress={() => Linking.openSettings()}>
+          <View style={styles.locationWarning}>
+            <Text style={[type.bodySmall, styles.locationWarningText]}>
+              Location is off — guardians won't get your location if there's a crash. Tap to enable.
+            </Text>
+          </View>
+        </Pressable>
+      )}
 
       <GlassCard style={styles.statusCard}>
         <Text style={[type.kicker, styles.dimText]}>STATUS</Text>
@@ -232,6 +243,15 @@ const styles = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { color: colors.textMuted },
   statusCard: {},
+  locationWarning: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,176,32,0.4)",
+    backgroundColor: "rgba(255,176,32,0.1)",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  locationWarningText: { color: "#FFB020" },
   dimText: { color: colors.textDim },
   statusHeadingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
   pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text },
