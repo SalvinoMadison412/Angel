@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     // not an incidental broader leak.
     const [{ data: profile }, { data: guardians, error: guardiansError }] = await Promise.all([
       db.from("profiles").select("name").eq("id", body.rider_id).maybeSingle(),
-      db.from("guardians").select("name, phone").eq("user_id", body.rider_id),
+      db.from("guardians").select("id, name, phone, is_active").eq("user_id", body.rider_id),
     ]);
     if (guardiansError) throw guardiansError;
 
@@ -182,7 +182,22 @@ Deno.serve(async (req) => {
         : `Angel emergency alert: ${riderName} may have been in a crash (severity ${body.severity}/5) ` +
           `at ${when} and did not respond to a 30-second check-in. Last known location: ${mapsLink}`;
 
-    const list = guardians ?? [];
+    // Guardians who haven't completed the Twilio sandbox opt-in (see
+    // migration 0010_guardian_active_status.sql /
+    // twilio-status-webhook) are skipped here rather than sent to Twilio
+    // at all — Twilio would just reject them anyway, and every guardian
+    // still opted in must be alerted regardless of how many others
+    // haven't, so this filters the list up front instead of treating a
+    // skip as any kind of failure.
+    const allGuardians = guardians ?? [];
+    const activeGuardians = allGuardians.filter((g) => g.is_active);
+    for (const guardian of allGuardians) {
+      if (!guardian.is_active) {
+        console.log(`Skipping guardian ${guardian.id}: not yet opted in to Twilio sandbox`);
+      }
+    }
+
+    const list = activeGuardians;
     let sent = 0;
     const failures: string[] = [];
 
@@ -216,7 +231,7 @@ Deno.serve(async (req) => {
       console.warn("[notify-guardians] some sends failed", failures);
     }
 
-    return jsonResponse({ sent, total: list.length, failures });
+    return jsonResponse({ sent, total: list.length, skipped: allGuardians.length - activeGuardians.length, failures });
   } catch (err) {
     console.error("[notify-guardians] error", err);
     return jsonResponse({ error: err instanceof Error ? err.message : "Unknown error" }, 500);

@@ -1,9 +1,10 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Linking, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
 import { useGuardians } from "../../hooks/useGuardians";
 import { localDigits, toE164 } from "../../lib/phone";
+import { buildGuardianOptInLink } from "../../lib/whatsapp";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 
@@ -24,6 +25,13 @@ export function GuardianFormScreen() {
   const [phone, setPhone] = useState(localDigits(existing?.phone ?? ""));
   const [relationship, setRelationship] = useState(existing?.relationship ?? "");
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Set only right after a successful ADD (never an edit of an existing
+  // guardian) — switches this screen from the form to the WhatsApp opt-in
+  // prompt below instead of navigating away immediately. A guardian who
+  // isn't opted into the Twilio sandbox never receives an alert no matter
+  // how correctly everything else is configured, so this can't be a step
+  // the rider has to go find in settings afterward.
+  const [justAdded, setJustAdded] = useState<{ name: string } | null>(null);
 
   const canSave = name.trim().length > 0 && phone.length === 10;
 
@@ -39,14 +47,50 @@ export function GuardianFormScreen() {
     try {
       if (existing) {
         await updateGuardian.mutateAsync({ id: existing.id, input });
+        navigation.goBack();
       } else {
         await addGuardian.mutateAsync(input);
+        setJustAdded({ name: input.name });
       }
-      navigation.goBack();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Couldn't save this guardian — try again.");
     }
   };
+
+  const optInLink = buildGuardianOptInLink();
+
+  const handleShare = () => {
+    if (!optInLink) return;
+    Linking.openURL(optInLink).catch((err) => console.warn("[guardians] failed to open WhatsApp", err));
+  };
+
+  if (justAdded) {
+    return (
+      <ScreenBackground scroll contentStyle={styles.content}>
+        <ScreenHeader title="ONE MORE STEP" onBack={() => navigation.goBack()} />
+        <View style={styles.body}>
+          <GlassCard accentBorder>
+            <Text style={[type.title, styles.optInHeading]}>{justAdded.name} added</Text>
+            <Text style={[type.body, styles.optInCopy]}>
+              Your guardian must tap this link and send the message before they can receive crash alerts — Angel
+              can't do this step for them.
+            </Text>
+          </GlassCard>
+
+          {optInLink ? (
+            <PillButton title={`SHARE WITH ${justAdded.name.toUpperCase()} ON WHATSAPP`} onPress={handleShare} />
+          ) : (
+            <Text style={styles.optInMissing}>
+              WhatsApp opt-in isn't configured yet — ask whoever set up this build to add
+              EXPO_PUBLIC_TWILIO_WHATSAPP_NUMBER / EXPO_PUBLIC_TWILIO_JOIN_MESSAGE.
+            </Text>
+          )}
+
+          <PillButton title="DONE" variant="outline" onPress={() => navigation.goBack()} />
+        </View>
+      </ScreenBackground>
+    );
+  }
 
   const handleDelete = async () => {
     if (!existing) return;
@@ -145,6 +189,9 @@ function Field({
 const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxxl },
   body: { paddingHorizontal: spacing.xl, gap: spacing.lg, marginTop: spacing.md },
+  optInHeading: { color: colors.text },
+  optInCopy: { color: colors.textMuted, marginTop: spacing.md },
+  optInMissing: { color: colors.textDim, textAlign: "center", ...type.bodySmall },
   dim: { color: colors.textDim },
   fieldSpacing: { marginBottom: spacing.lg },
   input: {

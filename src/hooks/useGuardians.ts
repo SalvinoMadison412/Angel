@@ -28,6 +28,17 @@ export function useGuardians() {
       if (error) throw error;
       return data ?? [];
     },
+    // is_active flips server-side via twilio-status-webhook, on the
+    // guardian's own schedule (whenever they get around to tapping the
+    // WhatsApp share link) — not something any client mutation here ever
+    // triggers, so the usual invalidateQueries-on-mutation pattern the rest
+    // of this hook uses can't pick it up. Short polling interval instead,
+    // only while the query is actually mounted/enabled and the app is
+    // foregrounded (refetchIntervalInBackground defaults to false) — cheap
+    // enough for a handful of guardian rows, and the GuardiansScreen active/
+    // inactive indicator is exactly the kind of status a rider expects to
+    // update on its own while they're looking at it.
+    refetchInterval: 5000,
   });
 
   const addGuardian = useMutation({

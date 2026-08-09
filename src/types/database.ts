@@ -62,6 +62,12 @@ export interface Guardian {
   relationship: string | null;
   priority: number;
   alert_mode: AlertMode;
+  // Twilio WhatsApp sandbox opt-in status — true once the guardian has sent
+  // the join message from their own WhatsApp (see twilio-status-webhook).
+  // Client-writable on neither insert nor update (see migration
+  // 0010_guardian_active_status.sql's column grants) — only the webhook,
+  // running as the service role, can flip this.
+  is_active: boolean;
   created_at: string;
 }
 

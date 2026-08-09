@@ -1,10 +1,17 @@
 import { useNavigation } from "@react-navigation/native";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Avatar, GlassCard, ScreenBackground, Tag } from "../../components";
 import { guardianTag, initialsFor, useGuardians } from "../../hooks/useGuardians";
+import { buildGuardianOptInLink } from "../../lib/whatsapp";
 import { colors, fontFamily, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
+
+function shareOptInLink() {
+  const link = buildGuardianOptInLink();
+  if (!link) return;
+  Linking.openURL(link).catch((err) => console.warn("[guardians] failed to open WhatsApp", err));
+}
 
 export function GuardiansScreen() {
   const navigation = useNavigation<AppTabNavigation<"Guardians">>();
@@ -42,6 +49,17 @@ export function GuardiansScreen() {
                 <Text style={styles.meta}>
                   {(guardian.relationship ?? "GUARDIAN").toUpperCase()} · {guardian.phone}
                 </Text>
+                <View style={styles.statusRow}>
+                  <View style={[styles.statusDot, guardian.is_active ? styles.statusDotActive : styles.statusDotInactive]} />
+                  <Text style={styles.statusLabel}>
+                    {guardian.is_active ? "Will receive alerts" : "Pending — not yet active"}
+                  </Text>
+                </View>
+                {!guardian.is_active && (
+                  <Text style={styles.shareLink} onPress={shareOptInLink}>
+                    SHARE VIA WHATSAPP
+                  </Text>
+                )}
               </View>
               <View style={styles.handle}>
                 <Pressable onPress={() => move(index, -1)} hitSlop={8}>
@@ -77,6 +95,18 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
   name: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 15 },
   meta: { color: colors.textDim, fontSize: 12, marginTop: 4, fontFamily: type.label.fontFamily },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
+  statusDot: { width: 7, height: 7, borderRadius: 3.5 },
+  statusDotActive: { backgroundColor: colors.success },
+  statusDotInactive: { backgroundColor: colors.textDim },
+  statusLabel: { color: colors.textDim, fontSize: 11, fontFamily: type.label.fontFamily },
+  shareLink: {
+    color: colors.accent,
+    fontSize: 11,
+    fontFamily: type.button.fontFamily,
+    letterSpacing: 0.5,
+    marginTop: spacing.xs,
+  },
   handle: { alignItems: "center", gap: 2 },
   handleArrow: { color: colors.textMuted, fontSize: 14 },
   addCard: {
