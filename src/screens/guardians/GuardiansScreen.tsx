@@ -1,17 +1,10 @@
 import { useNavigation } from "@react-navigation/native";
 import React from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Avatar, GlassCard, ScreenBackground, Tag } from "../../components";
 import { guardianTag, initialsFor, useGuardians } from "../../hooks/useGuardians";
-import { buildGuardianOptInLink } from "../../lib/whatsapp";
 import { colors, fontFamily, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
-
-function shareOptInLink() {
-  const link = buildGuardianOptInLink();
-  if (!link) return;
-  Linking.openURL(link).catch((err) => console.warn("[guardians] failed to open WhatsApp", err));
-}
 
 export function GuardiansScreen() {
   const navigation = useNavigation<AppTabNavigation<"Guardians">>();
@@ -36,7 +29,14 @@ export function GuardiansScreen() {
       </Text>
 
       {list.map((guardian, index) => (
-        <Pressable key={guardian.id} onPress={() => navigation.navigate("GuardianForm", { guardianId: guardian.id })}>
+        <Pressable
+          key={guardian.id}
+          onPress={() =>
+            guardian.is_active
+              ? navigation.navigate("GuardianForm", { guardianId: guardian.id })
+              : navigation.navigate("GuardianOptIn", { guardianName: guardian.name })
+          }
+        >
           <GlassCard style={styles.row}>
             <View style={styles.rowInner}>
               <Text style={styles.index}>{String(index + 1).padStart(2, "0")}</Text>
@@ -49,17 +49,16 @@ export function GuardiansScreen() {
                 <Text style={styles.meta}>
                   {(guardian.relationship ?? "GUARDIAN").toUpperCase()} · {guardian.phone}
                 </Text>
+                {/* Every guardian shows one of exactly these two states —
+                    there is no third "no status" case. Inactive is tappable
+                    (the whole row, including this label) to re-open the
+                    WhatsApp invite flow — see the Pressable's onPress above. */}
                 <View style={styles.statusRow}>
-                  <View style={[styles.statusDot, guardian.is_active ? styles.statusDotActive : styles.statusDotInactive]} />
-                  <Text style={styles.statusLabel}>
-                    {guardian.is_active ? "Will receive alerts" : "Pending — not yet active"}
+                  <View style={[styles.statusDot, guardian.is_active ? styles.statusDotActive : styles.statusDotPending]} />
+                  <Text style={[styles.statusLabel, !guardian.is_active && styles.statusLabelPending]}>
+                    {guardian.is_active ? "Will receive crash alerts" : "Not active — tap to send WhatsApp invite"}
                   </Text>
                 </View>
-                {!guardian.is_active && (
-                  <Text style={styles.shareLink} onPress={shareOptInLink}>
-                    SHARE VIA WHATSAPP
-                  </Text>
-                )}
               </View>
               <View style={styles.handle}>
                 <Pressable onPress={() => move(index, -1)} hitSlop={8}>
@@ -98,15 +97,9 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
   statusDot: { width: 7, height: 7, borderRadius: 3.5 },
   statusDotActive: { backgroundColor: colors.success },
-  statusDotInactive: { backgroundColor: colors.textDim },
+  statusDotPending: { backgroundColor: colors.warning },
   statusLabel: { color: colors.textDim, fontSize: 11, fontFamily: type.label.fontFamily },
-  shareLink: {
-    color: colors.accent,
-    fontSize: 11,
-    fontFamily: type.button.fontFamily,
-    letterSpacing: 0.5,
-    marginTop: spacing.xs,
-  },
+  statusLabelPending: { color: colors.warning },
   handle: { alignItems: "center", gap: 2 },
   handleArrow: { color: colors.textMuted, fontSize: 14 },
   addCard: {

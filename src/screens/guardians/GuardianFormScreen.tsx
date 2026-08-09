@@ -1,10 +1,9 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
-import { Linking, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
-import { useGuardians } from "../../hooks/useGuardians";
+import { GuardianInput, useGuardians } from "../../hooks/useGuardians";
 import { localDigits, toE164 } from "../../lib/phone";
-import { buildGuardianOptInLink } from "../../lib/whatsapp";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
 
@@ -18,79 +17,49 @@ export function GuardianFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "GuardianForm">>();
   const { guardianId } = route.params;
 
-  const { data: guardians, addGuardian, updateGuardian, removeGuardian } = useGuardians();
+  const { data: guardians, updateGuardian, removeGuardian } = useGuardians();
   const existing = useMemo(() => guardians?.find((g) => g.id === guardianId), [guardians, guardianId]);
 
   const [name, setName] = useState(existing?.name ?? "");
   const [phone, setPhone] = useState(localDigits(existing?.phone ?? ""));
   const [relationship, setRelationship] = useState(existing?.relationship ?? "");
   const [saveError, setSaveError] = useState<string | null>(null);
-  // Set only right after a successful ADD (never an edit of an existing
-  // guardian) — switches this screen from the form to the WhatsApp opt-in
-  // prompt below instead of navigating away immediately. A guardian who
-  // isn't opted into the Twilio sandbox never receives an alert no matter
-  // how correctly everything else is configured, so this can't be a step
-  // the rider has to go find in settings afterward.
-  const [justAdded, setJustAdded] = useState<{ name: string } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const canSave = name.trim().length > 0 && phone.length === 10;
 
-  const handleSave = async () => {
+  // A brand-new guardian is never written to the database from here —
+  // Save instead hands the not-yet-saved input off to GuardianOptInScreen,
+  // which performs the actual insert itself once the rider resolves the
+  // blocking WhatsApp opt-in step (sent, or explicitly deferred). See that
+  // screen for why it has to be a real pushed stack screen rather than an
+  // in-place modal. Editing an existing guardian is unaffected — that gate
+  // is specifically about a guardian who's never had a chance to opt in.
+  const handleSave = () => {
     if (!canSave) return;
     setSaveError(null);
-    const input = {
+    const input: GuardianInput = {
       name: name.trim(),
       phone: toE164(phone),
       relationship: relationship.trim(),
       alertMode: existing?.alert_mode ?? DEFAULT_ALERT_MODE,
     };
-    try {
-      if (existing) {
-        await updateGuardian.mutateAsync({ id: existing.id, input });
-        navigation.goBack();
-      } else {
-        await addGuardian.mutateAsync(input);
-        setJustAdded({ name: input.name });
-      }
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Couldn't save this guardian — try again.");
+
+    if (existing) {
+      setSaving(true);
+      updateGuardian.mutate(
+        { id: existing.id, input },
+        {
+          onSuccess: () => navigation.goBack(),
+          onError: (err) => setSaveError(err instanceof Error ? err.message : "Couldn't save this guardian — try again."),
+          onSettled: () => setSaving(false),
+        }
+      );
+      return;
     }
+
+    navigation.navigate("GuardianOptIn", { guardianName: input.name, pendingGuardianInput: input });
   };
-
-  const optInLink = buildGuardianOptInLink();
-
-  const handleShare = () => {
-    if (!optInLink) return;
-    Linking.openURL(optInLink).catch((err) => console.warn("[guardians] failed to open WhatsApp", err));
-  };
-
-  if (justAdded) {
-    return (
-      <ScreenBackground scroll contentStyle={styles.content}>
-        <ScreenHeader title="ONE MORE STEP" onBack={() => navigation.goBack()} />
-        <View style={styles.body}>
-          <GlassCard accentBorder>
-            <Text style={[type.title, styles.optInHeading]}>{justAdded.name} added</Text>
-            <Text style={[type.body, styles.optInCopy]}>
-              Your guardian must tap this link and send the message before they can receive crash alerts — Angel
-              can't do this step for them.
-            </Text>
-          </GlassCard>
-
-          {optInLink ? (
-            <PillButton title={`SHARE WITH ${justAdded.name.toUpperCase()} ON WHATSAPP`} onPress={handleShare} />
-          ) : (
-            <Text style={styles.optInMissing}>
-              WhatsApp opt-in isn't configured yet — ask whoever set up this build to add
-              EXPO_PUBLIC_TWILIO_WHATSAPP_NUMBER / EXPO_PUBLIC_TWILIO_JOIN_MESSAGE.
-            </Text>
-          )}
-
-          <PillButton title="DONE" variant="outline" onPress={() => navigation.goBack()} />
-        </View>
-      </ScreenBackground>
-    );
-  }
 
   const handleDelete = async () => {
     if (!existing) return;
@@ -139,7 +108,7 @@ export function GuardianFormScreen() {
           title={existing ? "SAVE CHANGES" : "ADD GUARDIAN"}
           onPress={handleSave}
           disabled={!canSave}
-          loading={addGuardian.isPending || updateGuardian.isPending}
+          loading={saving}
         />
 
         {existing && (
@@ -189,9 +158,6 @@ function Field({
 const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxxl },
   body: { paddingHorizontal: spacing.xl, gap: spacing.lg, marginTop: spacing.md },
-  optInHeading: { color: colors.text },
-  optInCopy: { color: colors.textMuted, marginTop: spacing.md },
-  optInMissing: { color: colors.textDim, textAlign: "center", ...type.bodySmall },
   dim: { color: colors.textDim },
   fieldSpacing: { marginBottom: spacing.lg },
   input: {

@@ -19,6 +19,11 @@ export const colors = {
 
   success: "#3DDC97",
   danger: "#FF5722",
+  // Matches the amber literal ("#FFB020") already reused ad hoc in
+  // HomeScreen's location-permission warning and CrashAlertScreen's
+  // tilt-trigger styling — promoted to a real token here rather than
+  // adding a fourth untracked copy of the same value.
+  warning: "#FFB020",
 
   overlay: "rgba(10, 10, 10, 0.82)",
 } as const;

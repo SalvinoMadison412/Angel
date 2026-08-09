@@ -64,7 +64,8 @@
       ],
       "expo-web-browser",
       "./plugins/withReleaseSigning.js",
-      "./plugins/withoutSystemAlertWindow.js"
+      "./plugins/withoutSystemAlertWindow.js",
+      "./plugins/withWhatsAppQuery.js"
     ]
   }
 }
