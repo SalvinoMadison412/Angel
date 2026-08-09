@@ -2,7 +2,6 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp, NavigatorScreenParams } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CrashEvent } from "../services/bluetooth";
-import { GuardianInput } from "../hooks/useGuardians";
 
 export type AuthStackParamList = {
   PhoneEntry: undefined;
@@ -26,10 +25,7 @@ export type AppTabParamList = {
 };
 
 export type RootStackParamList = {
-  // Accepts nested tab params (e.g. { screen: "Guardians" }) so a screen
-  // popping back to Tabs can land on a specific tab instead of always
-  // resetting to whichever tab is listed first in AppTabs.tsx.
-  Tabs: NavigatorScreenParams<AppTabParamList> | undefined;
+  Tabs: undefined;
   DeviceSetup: undefined;
   // `mandatory` drives whether the screen can be skipped — true right after
   // a first connect to an uncalibrated device, absent/false for voluntary
@@ -49,15 +45,6 @@ export type RootStackParamList = {
   // it, see GuardianNotifiedScreen.tsx.
   GuardianNotified: undefined;
   GuardianForm: { guardianId?: string };
-  // Full-screen, back-blocked WhatsApp sandbox opt-in step — pushed as a
-  // real stack screen (not an in-place modal component) specifically so it
-  // covers the bottom tab bar too and can't be escaped by tapping a tab;
-  // see GuardianOptInScreen.tsx for why that matters. `pendingGuardianInput`
-  // present means this is gating a brand-new guardian's save (the screen
-  // performs the actual insert itself once resolved); absent means it's a
-  // re-invite for an already-saved, still-pending guardian (nothing to
-  // write, just closes).
-  GuardianOptIn: { guardianName: string; pendingGuardianInput?: GuardianInput };
   // TEMP DIAGNOSTIC — remove once the calibration_complete investigation is
   // resolved. See screens/debug/DiagnosticScreen.tsx.
   Diagnostic: undefined;

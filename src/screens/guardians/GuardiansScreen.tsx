@@ -29,14 +29,7 @@ export function GuardiansScreen() {
       </Text>
 
       {list.map((guardian, index) => (
-        <Pressable
-          key={guardian.id}
-          onPress={() =>
-            guardian.is_active
-              ? navigation.navigate("GuardianForm", { guardianId: guardian.id })
-              : navigation.navigate("GuardianOptIn", { guardianName: guardian.name })
-          }
-        >
+        <Pressable key={guardian.id} onPress={() => navigation.navigate("GuardianForm", { guardianId: guardian.id })}>
           <GlassCard style={styles.row}>
             <View style={styles.rowInner}>
               <Text style={styles.index}>{String(index + 1).padStart(2, "0")}</Text>
@@ -49,15 +42,11 @@ export function GuardiansScreen() {
                 <Text style={styles.meta}>
                   {(guardian.relationship ?? "GUARDIAN").toUpperCase()} · {guardian.phone}
                 </Text>
-                {/* Every guardian shows one of exactly these two states —
-                    there is no third "no status" case. Inactive is tappable
-                    (the whole row, including this label) to re-open the
-                    WhatsApp invite flow — see the Pressable's onPress above. */}
+                {/* Every saved guardian is notified — no opt-in step, no
+                    pending state — so the status is always this one line. */}
                 <View style={styles.statusRow}>
-                  <View style={[styles.statusDot, guardian.is_active ? styles.statusDotActive : styles.statusDotPending]} />
-                  <Text style={[styles.statusLabel, !guardian.is_active && styles.statusLabelPending]}>
-                    {guardian.is_active ? "Will receive crash alerts" : "Not active — tap to send WhatsApp invite"}
-                  </Text>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.statusLabel}>Will receive crash alerts</Text>
                 </View>
               </View>
               <View style={styles.handle}>
@@ -95,11 +84,8 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 15 },
   meta: { color: colors.textDim, fontSize: 12, marginTop: 4, fontFamily: type.label.fontFamily },
   statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
-  statusDot: { width: 7, height: 7, borderRadius: 3.5 },
-  statusDotActive: { backgroundColor: colors.success },
-  statusDotPending: { backgroundColor: colors.warning },
+  statusDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.success },
   statusLabel: { color: colors.textDim, fontSize: 11, fontFamily: type.label.fontFamily },
-  statusLabelPending: { color: colors.warning },
   handle: { alignItems: "center", gap: 2 },
   handleArrow: { color: colors.textMuted, fontSize: 14 },
   addCard: {

@@ -17,7 +17,7 @@ export function GuardianFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "GuardianForm">>();
   const { guardianId } = route.params;
 
-  const { data: guardians, updateGuardian, removeGuardian } = useGuardians();
+  const { data: guardians, addGuardian, updateGuardian, removeGuardian } = useGuardians();
   const existing = useMemo(() => guardians?.find((g) => g.id === guardianId), [guardians, guardianId]);
 
   const [name, setName] = useState(existing?.name ?? "");
@@ -28,13 +28,6 @@ export function GuardianFormScreen() {
 
   const canSave = name.trim().length > 0 && phone.length === 10;
 
-  // A brand-new guardian is never written to the database from here —
-  // Save instead hands the not-yet-saved input off to GuardianOptInScreen,
-  // which performs the actual insert itself once the rider resolves the
-  // blocking WhatsApp opt-in step (sent, or explicitly deferred). See that
-  // screen for why it has to be a real pushed stack screen rather than an
-  // in-place modal. Editing an existing guardian is unaffected — that gate
-  // is specifically about a guardian who's never had a chance to opt in.
   const handleSave = () => {
     if (!canSave) return;
     setSaveError(null);
@@ -45,20 +38,18 @@ export function GuardianFormScreen() {
       alertMode: existing?.alert_mode ?? DEFAULT_ALERT_MODE,
     };
 
-    if (existing) {
-      setSaving(true);
-      updateGuardian.mutate(
-        { id: existing.id, input },
-        {
-          onSuccess: () => navigation.goBack(),
-          onError: (err) => setSaveError(err instanceof Error ? err.message : "Couldn't save this guardian — try again."),
-          onSettled: () => setSaving(false),
-        }
-      );
-      return;
-    }
+    const callbacks = {
+      onSuccess: () => navigation.goBack(),
+      onError: (err: unknown) => setSaveError(err instanceof Error ? err.message : "Couldn't save this guardian — try again."),
+      onSettled: () => setSaving(false),
+    };
 
-    navigation.navigate("GuardianOptIn", { guardianName: input.name, pendingGuardianInput: input });
+    setSaving(true);
+    if (existing) {
+      updateGuardian.mutate({ id: existing.id, input }, callbacks);
+    } else {
+      addGuardian.mutate(input, callbacks);
+    }
   };
 
   const handleDelete = async () => {
