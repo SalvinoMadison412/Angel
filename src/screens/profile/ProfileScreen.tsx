@@ -1,10 +1,17 @@
+import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { GlassCard, PillButton, ScreenBackground } from "../../components";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Avatar, GlassCard, PillButton, ScreenBackground } from "../../components";
 import { useAuth, useDevice, useEmergencyProfile, useProfile } from "../../hooks";
 import { localDigits, toE164 } from "../../lib/phone";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
+}
 
 const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -129,6 +136,29 @@ export function ProfileScreen() {
     setEditing(false);
   };
 
+  const handlePickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Photo access needed",
+        "Angel needs permission to your photo library to set a profile picture. You can grant this in system Settings."
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    try {
+      await profile.uploadAvatar.mutateAsync(result.assets[0].uri);
+    } catch (err) {
+      Alert.alert("Couldn't upload photo", err instanceof Error ? err.message : "Try again.");
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert("Log out?", "You'll need to verify your phone number again to sign back in.", [
       { text: "Cancel", style: "cancel" },
@@ -187,6 +217,21 @@ export function ProfileScreen() {
         </Pressable>
       </View>
       <Text style={[type.bodySmall, styles.subtitle]}>Your account, bike, and emergency details.</Text>
+
+      <Pressable style={styles.avatarRow} onPress={handlePickAvatar} disabled={profile.uploadAvatar.isPending}>
+        <View style={styles.avatarWrap}>
+          <Avatar initials={initialsFor(name || "?")} size={72} imageUri={profile.data?.avatar_url} accent />
+          {profile.uploadAvatar.isPending && (
+            <View style={styles.avatarOverlay}>
+              <ActivityIndicator color={colors.text} />
+            </View>
+          )}
+        </View>
+        <Text style={styles.avatarAction}>
+          {profile.data?.avatar_url ? "CHANGE PHOTO" : "ADD PHOTO"}
+        </Text>
+      </Pressable>
+
       {justSaved && <Text style={styles.saved}>Saved.</Text>}
       {saveError && <Text style={styles.error}>{saveError}</Text>}
 
@@ -366,6 +411,20 @@ const styles = StyleSheet.create({
   editAction: { color: colors.accent, paddingTop: spacing.xs },
   editActionDisabled: { opacity: 0.5 },
   subtitle: { color: colors.textMuted, marginBottom: spacing.xs },
+  avatarRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  avatarWrap: { position: "relative" },
+  avatarOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 36,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarAction: { color: colors.accent, fontFamily: type.button.fontFamily, fontSize: 12, letterSpacing: 1 },
   sectionLabel: { color: colors.textDim, marginTop: spacing.xs },
   accentText: { color: colors.accent },
   copy: { color: colors.textMuted },

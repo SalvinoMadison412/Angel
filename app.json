@@ -45,6 +45,12 @@
       "expo-font",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Angel uses your photo library to set a profile picture."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#0A0A0A",

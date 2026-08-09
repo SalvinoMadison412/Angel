@@ -8,6 +8,7 @@ export interface Profile {
   id: string;
   name: string | null;
   phone: string | null;
+  avatar_url: string | null;
   subscription_tier: SubscriptionTier | null;
   subscription_expiry: string | null;
   onboarding_completed: boolean;
