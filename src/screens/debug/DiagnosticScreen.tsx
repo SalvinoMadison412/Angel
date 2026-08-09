@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { GlassCard, ScreenBackground, ScreenHeader } from "../../components";
-import { useCrashDetector } from "../../hooks";
+import { useCrashDetector, useCrashDetectorTelemetry } from "../../hooks";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation } from "../../navigation/types";
 
@@ -17,7 +17,8 @@ import { RootStackNavigation } from "../../navigation/types";
 // handleNotification (logcat tag [BLE-PACKET]).
 export function DiagnosticScreen() {
   const navigation = useNavigation<RootStackNavigation>();
-  const { isLinked, isReconnecting, telemetry, lastEvent, fault, calibrationConfirmation } = useCrashDetector();
+  const { isLinked, isReconnecting, lastEvent, fault, calibrationConfirmation } = useCrashDetector();
+  const telemetry = useCrashDetectorTelemetry();
 
   return (
     <ScreenBackground scroll contentStyle={styles.content}>

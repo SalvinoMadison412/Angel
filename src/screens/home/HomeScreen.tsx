@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { GlassCard, HoloMotorcycle, ScreenBackground, SeverityMeter, StatTile } from "../../components";
-import { useCrashDetector, useGuardians, useLocationPermission } from "../../hooks";
+import { useCrashDetector, useCrashDetectorTelemetry, useGuardians, useLocationPermission } from "../../hooks";
 import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
 import { colors, fontFamily, severityColor, spacing, type } from "../../theme";
 import { AppTabNavigation } from "../../navigation/types";
@@ -28,7 +28,8 @@ export function HomeScreen() {
   const navigation = useNavigation<AppTabNavigation<"Home">>();
   const { data: guardians } = useGuardians();
   const locationPermission = useLocationPermission();
-  const { isLinked, isReconnecting, telemetry, lastEvent } = useCrashDetector();
+  const { isLinked, isReconnecting, lastEvent } = useCrashDetector();
+  const telemetry = useCrashDetectorTelemetry();
   const { simulateCrash, simulateFault, clearSimulatedFault } = useCrashDetector({ mock: true });
 
   // Driven by the live BLE connection state, not the device row's persisted
