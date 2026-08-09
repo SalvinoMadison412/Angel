@@ -3,12 +3,12 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
 import { useDevice, useEmergencyProfile, useGuardians, useProfile } from "../../hooks";
 import { localDigits, toE164 } from "../../lib/phone";
-import { requestCrashNotificationPermission } from "../../services/notifications";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
 import { LocationPermissionScreen } from "./LocationPermissionScreen";
+import { NotificationPermissionScreen } from "./NotificationPermissionScreen";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const MAX_CONTACTS = 3;
 
@@ -47,17 +47,6 @@ export function OnboardingScreen() {
 
   const advanceTo = async (next: number) => {
     if (next > TOTAL_STEPS) {
-      // Location itself was already asked for (with rationale) by
-      // LocationPermissionScreen at step 5 — only the notification
-      // permission remains here. Same reasoning as that screen: a crash
-      // notification while backgrounded is useless if POST_NOTIFICATIONS
-      // was never granted, and mid-emergency is the wrong time to ask for
-      // the first time.
-      try {
-        await requestCrashNotificationPermission();
-      } catch (err) {
-        console.warn("[onboarding] failed to request notification permission", err);
-      }
       await profile.completeOnboarding.mutateAsync();
       return;
     }
@@ -77,6 +66,7 @@ export function OnboardingScreen() {
       {step === 3 && <ContactsStep guardians={guardians} onContinue={() => advanceTo(4)} />}
       {step === 4 && <BikeStep device={device} onContinue={() => advanceTo(5)} />}
       {step === 5 && <LocationPermissionScreen onContinue={() => advanceTo(6)} />}
+      {step === 6 && <NotificationPermissionScreen onContinue={() => advanceTo(7)} />}
     </ScreenBackground>
   );
 }

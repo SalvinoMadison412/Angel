@@ -80,6 +80,17 @@ async function captureCurrentLocation(): Promise<{ lat: number | null; lng: numb
 // threshold ladder was never validated against real crash/non-crash data);
 // nothing reads this file yet, but not collecting it now would make that
 // work impossible later.
+//
+// RETENTION (privacy-policy alignment pass): this file is on-device,
+// append-only, and unbounded — every logged line (including raw impactG/
+// gyroDps/tilt/still, not just the computed severity) stays in app storage
+// indefinitely; there is no purge, TTL, or size cap here. Unlike the
+// `incidents` table (see migration 0002), this local log is NOT currently
+// described anywhere in PRIVACY_POLICY.md. Flagged, not fixed here — before
+// release, either (a) add this local log to the policy's "Bluetooth /
+// sensor data" section, or (b) stop persisting it / add rotation, since
+// right now it's real on-device data collection the policy doesn't
+// disclose.
 // ───────────────────────────────────────────────────────────────────────
 export type CrashEventOutcome = "below_threshold" | "cancelled" | "confirmed";
 
@@ -119,6 +130,10 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
 
   const { lat, lng } = await captureCurrentLocation();
 
+  // Raw sensor readings (impact/gyro/tilt/still) are written here alongside
+  // the computed severity and retained indefinitely with the rest of the
+  // incidents row — see migration 0002_crash_metrics.sql for exactly what
+  // "retained" means here and what it maps to in PRIVACY_POLICY.md.
   const { data, error } = await supabase
     .from("incidents")
     .insert({
@@ -140,6 +155,25 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
 
   const incident = data as Incident;
 
+  // MEDICAL DATA VISIBILITY (privacy-policy alignment pass, audited against
+  // the real crash_tickets/Angel Partners flow): medicalInfo below only
+  // ever reaches notificationService.notifyGuardians() — today that's
+  // MockNotificationService, which logs a "medical profile included"
+  // summary into incident_events (RLS: rider-only, see 0001_init.sql) and
+  // nothing else. It is never attached to the crash_tickets row created in
+  // CrashAlertScreen (that insert has no medical columns — see its schema
+  // in migration 0005), and emergency_profiles' RLS
+  // (migration 0004_onboarding.sql) grants select/insert/update/delete to
+  // `auth.uid() = user_id` only — no policy grants a partner access, at any
+  // ticket status. Confirmed empirically too: nothing under angel-partners/
+  // (TicketAlertScreen, ActiveResponseScreen, useTickets.ts) ever queries
+  // emergency_profiles or reads a medical field. So the real current
+  // behavior is stricter than "gated on acceptance" — a partner cannot see
+  // medical data at any point in the current build, not just before
+  // accepting. PRIVACY_POLICY.md's "shared with a dispatched responder at
+  // the moment of a confirmed crash alert" describes intended v2 behavior,
+  // not what this codebase actually does today — worth reconciling before
+  // that line is relied on as an accurate description of current behavior.
   let medicalInfo: MedicalSnapshot = null;
   try {
     const { data: emergencyProfile, error: profileError } = await supabase

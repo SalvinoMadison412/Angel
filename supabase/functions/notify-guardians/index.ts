@@ -137,6 +137,23 @@ Deno.serve(async (req) => {
     // (already verified above), not as them.
     const db = createClient(supabaseUrl, serviceRoleKey);
 
+    // WHAT REACHES TWILIO, exhaustively (privacy-policy alignment pass):
+    // this function sends Twilio exactly `From` (our own WhatsApp sender
+    // number), `To` (this one guardian's phone, from the `guardians` table
+    // below), and `Body` (the message text assembled just below — rider
+    // name, severity, a human timestamp, and a Google Maps link built from
+    // the lat/lng this endpoint's own caller already validated against the
+    // authenticated session). That's it. Explicitly NOT sent to Twilio:
+    // medical/emergency-profile data (this function never queries
+    // emergency_profiles — it only ever selects `profiles.name` and
+    // `guardians.name, guardians.phone`, both below), any other guardian's
+    // contact info (each guardian only ever appears in their own message's
+    // `To`, never another's `Body`), the rider's phone number/account id,
+    // device/sensor readings, or raw lat/lng as separate fields — location
+    // only ever leaves this function pre-formatted into the Maps link
+    // inside Body, which is the intentional, policy-documented "attach
+    // location to the guardian alert" behavior (see PRIVACY_POLICY.md),
+    // not an incidental broader leak.
     const [{ data: profile }, { data: guardians, error: guardiansError }] = await Promise.all([
       db.from("profiles").select("name").eq("id", body.rider_id).maybeSingle(),
       db.from("guardians").select("name, phone").eq("user_id", body.rider_id),
@@ -150,11 +167,18 @@ Deno.serve(async (req) => {
         ? `https://www.google.com/maps?q=${body.lat},${body.lng}`
         : "location unavailable";
 
+    // "A responder has been dispatched" was accurate under the pre-v1
+    // partner-matching design; partner/responder dispatch was removed for
+    // the v1 Play Store release (see CrashAlertScreen.tsx's TODO: RE-ENABLE
+    // FOR V2 markers) and this copy was never updated to match — it was
+    // telling guardians something that no longer happens. Fixed here as
+    // part of the same audit pass that's documenting what this message
+    // actually contains.
     const reason = body.reason ?? "missed_checkin";
     const message =
       reason === "confirmed_crash"
         ? `Angel emergency alert: ${riderName} was in a crash (severity ${body.severity}/5) at ${when}. ` +
-          `A responder has been dispatched. Last known location: ${mapsLink}`
+          `Last known location: ${mapsLink}`
         : `Angel emergency alert: ${riderName} may have been in a crash (severity ${body.severity}/5) ` +
           `at ${when} and did not respond to a 30-second check-in. Last known location: ${mapsLink}`;
 

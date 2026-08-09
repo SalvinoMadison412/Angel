@@ -74,6 +74,14 @@ export function CrashAlertScreen() {
         }
       }
 
+      // Privacy-policy alignment note: this insert is deliberately
+      // medical-data-free — crash_tickets has no blood_group/medical_conditions
+      // columns (see its schema in migration 0005_partners_platform.sql), so
+      // a partner reading an open ticket sees only sensor/location data,
+      // never medical info, regardless of ticket status. See the matching
+      // comment in emergencyPipeline.ts's confirmIncident() for the full
+      // audit of where medical data can (and currently cannot) reach a
+      // partner.
       try {
         const { data, error } = await supabase
           .from("crash_tickets")

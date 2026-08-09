@@ -70,3 +70,12 @@ downstream flow is different from a real crash.
 Run the migrations in `supabase/migrations/` in order against your project
 (SQL Editor → paste each file → run). `0002_crash_metrics.sql` adds the raw
 sensor metrics columns the emergency pipeline writes alongside severity.
+
+## Privacy
+
+What Angel collects, why, and how it's retained is documented in
+[`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) (source of truth), mirrored at
+[`privacy-policy.html`](privacy-policy.html) (the public-facing page, e.g.
+for the Play Console listing) and [`docs/PRIVACY_POLICY.docx`](docs/PRIVACY_POLICY.docx)
+(a Word copy for sharing outside the repo). All three should read the same —
+if you change one, update the other two.

@@ -48,7 +48,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Angel uses your photo library to set a profile picture."
+          "photosPermission": "Angel uses your photo library to set a profile picture.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       [
