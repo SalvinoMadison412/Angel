@@ -44,8 +44,28 @@ async function invokeNotifyGuardians(input: {
       reason: input.reason,
     },
   });
-  if (error) throw error;
-  return { sent: typeof data?.sent === "number" ? data.sent : 0 };
+  if (error) {
+    // supabase-js's FunctionsHttpError only ever carries a generic "Edge
+    // Function returned a non-2xx status code" message — the actual reason
+    // (from notify-guardians' own jsonResponse({ error }, 500) body) sits
+    // unread on error.context, a Response. Surface it so callers' logs show
+    // what actually failed instead of just the status code.
+    const context = (error as { context?: Response }).context;
+    if (context && typeof context.json === "function") {
+      try {
+        const body = await context.clone().json();
+        if (body?.error) error.message = `${error.message}: ${body.error}`;
+      } catch {
+        // context wasn't JSON (e.g. a network-level failure) — fall back to
+        // the generic message rather than throwing a secondary error here.
+      }
+    }
+    throw error;
+  }
+  // `whatsAppSent` reflects the immediate-phase result only — the edge
+  // function's backup voice calls fire 30s later in the background (via
+  // EdgeRuntime.waitUntil) and aren't reflected in this response.
+  return { sent: typeof data?.whatsAppSent === "number" ? data.whatsAppSent : 0 };
 }
 
 // Best-effort GPS capture shared by both alert paths below — never blocks
