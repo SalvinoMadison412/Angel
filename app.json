@@ -33,7 +33,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Angel uses your location to show responders where to find you during a crash alert."
+          "locationWhenInUsePermission": "Angel needs your precise location to send your exact position to guardians in a crash emergency."
         }
       ],
       [

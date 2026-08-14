@@ -61,11 +61,11 @@ export function OnboardingScreen() {
         <Text style={[type.kicker, styles.stepLabel]}>STEP {step} OF {TOTAL_STEPS}</Text>
       </View>
 
-      {step === 1 && <AboutYouStep emergencyProfile={emergencyProfile} onContinue={() => advanceTo(2)} />}
-      {step === 2 && <MedicalStep emergencyProfile={emergencyProfile} onContinue={() => advanceTo(3)} />}
-      {step === 3 && <ContactsStep guardians={guardians} onContinue={() => advanceTo(4)} />}
-      {step === 4 && <BikeStep device={device} onContinue={() => advanceTo(5)} />}
-      {step === 5 && <LocationPermissionScreen onContinue={() => advanceTo(6)} />}
+      {step === 1 && <LocationPermissionScreen onContinue={() => advanceTo(2)} />}
+      {step === 2 && <AboutYouStep emergencyProfile={emergencyProfile} onContinue={() => advanceTo(3)} />}
+      {step === 3 && <MedicalStep emergencyProfile={emergencyProfile} onContinue={() => advanceTo(4)} />}
+      {step === 4 && <ContactsStep guardians={guardians} onContinue={() => advanceTo(5)} />}
+      {step === 5 && <BikeStep device={device} onContinue={() => advanceTo(6)} />}
       {step === 6 && <NotificationPermissionScreen onContinue={() => advanceTo(7)} />}
     </ScreenBackground>
   );

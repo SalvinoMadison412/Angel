@@ -18,12 +18,25 @@ interface Props {
 /**
  * Shown once, right before the OS location dialog — the bare system prompt
  * gives no reason, and "why is a crash app asking for my location" is
- * exactly the kind of thing that gets a rider to tap Deny.
+ * exactly the kind of thing that gets a rider to tap Deny. First step of
+ * onboarding on purpose — location is core to what this app does, so a
+ * rider should decide on it before investing time in the rest of setup.
  *
- * On grant: also requests background permission (so a crash alert can
- * still attach a location if the app isn't foregrounded) and starts the
- * live position watch (see locationTracking.ts) so crash detection has a
- * cached fix instantly instead of waiting on a fresh one.
+ * Foreground-only, deliberately: Angel does not request "Always"/background
+ * location. Crash detection itself only runs while the app is foregrounded
+ * (react-native-ble-plx's isBackgroundEnabled is off, and there's no
+ * TaskManager background location task), so a background grant would do
+ * nothing but sit on the rider's device — and both app stores expect a
+ * background-location request to come with an actual background use, not
+ * just a "just in case." Revisit this (and this screen) together if
+ * background crash detection ever ships.
+ *
+ * On grant: also checks whether the OS granted Precise vs Approximate
+ * accuracy (Android 12+ / iOS 14+ both let a user pick) and nudges toward
+ * Settings if not, since Approximate isn't accurate enough to actually find
+ * someone after a crash. Then starts the live position watch (see
+ * locationTracking.ts) so crash detection has a cached fix instantly
+ * instead of waiting on a fresh one.
  *
  * On denial: does NOT silently continue — shows a blocking explanation
  * with a path to Settings, since "why is a crash app asking for my
@@ -36,24 +49,22 @@ interface Props {
 export function LocationPermissionScreen({ onContinue }: Props) {
   const [requesting, setRequesting] = useState(false);
   const [denied, setDenied] = useState(false);
+  const [imprecise, setImprecise] = useState(false);
 
   const handleEnable = async () => {
     setRequesting(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      await SecureStore.setItemAsync(LOCATION_PERMISSION_STATUS_KEY, status);
+      const result = await Location.requestForegroundPermissionsAsync();
+      await SecureStore.setItemAsync(LOCATION_PERMISSION_STATUS_KEY, result.status);
 
-      if (status === "granted") {
-        // Best-effort — a rider who grants foreground but declines
-        // background still gets everything the foreground grant enables;
-        // this only adds coverage for a crash while backgrounded.
-        try {
-          await Location.requestBackgroundPermissionsAsync();
-        } catch (err) {
-          console.warn("[onboarding] failed to request background location permission", err);
-        }
+      if (result.status === "granted") {
+        const isImprecise = result.android?.accuracy === "coarse" || result.ios?.accuracy === "reduced";
         await refreshLocationPermissionStatus();
-        onContinue();
+        if (isImprecise) {
+          setImprecise(true);
+        } else {
+          onContinue();
+        }
       } else {
         setDenied(true);
       }
@@ -77,8 +88,8 @@ export function LocationPermissionScreen({ onContinue }: Props) {
       <View style={styles.stepBody}>
         <Text style={[type.title, styles.heading]}>Location is off</Text>
         <Text style={[type.body, styles.copy]}>
-          Angel needs your location to send it to your guardians if you're in a crash. Without this, we can't tell
-          them where you are.
+          Angel needs your precise location to send your exact position to guardians in a crash emergency. Without
+          this, we can't tell them where you are.
         </Text>
 
         <PillButton title="OPEN SETTINGS" onPress={() => Linking.openSettings()} style={styles.cta} />
@@ -89,19 +100,37 @@ export function LocationPermissionScreen({ onContinue }: Props) {
     );
   }
 
+  if (imprecise) {
+    return (
+      <View style={styles.stepBody}>
+        <Text style={[type.title, styles.heading]}>Precise location is off</Text>
+        <Text style={[type.body, styles.copy]}>
+          Angel only has your approximate location — that's not accurate enough for guardians to actually find you
+          after a crash. Turn on Precise Location for Angel in Settings.
+        </Text>
+
+        <PillButton title="OPEN SETTINGS" onPress={() => Linking.openSettings()} style={styles.cta} />
+        <Text style={styles.skipLink} onPress={onContinue}>
+          Continue anyway
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.stepBody}>
       <Text style={[type.title, styles.heading]}>Share your location</Text>
       <Text style={[type.body, styles.copy]}>
-        When a crash is confirmed, Angel attaches your GPS coordinates to the alert sent to guardians and
-        responders — it's how they find you.
+        Angel needs your precise location to send your exact position to guardians in a crash emergency — it's how
+        they find you.
       </Text>
 
       <GlassCard accentBorder>
         <Text style={[type.kicker, styles.accentText]}>WHY WE ASK</Text>
         <Text style={[type.bodySmall, styles.copy, styles.consentCopy]}>
           Location is only captured at the moment of a confirmed crash alert — Angel never tracks or stores your
-          location otherwise.
+          location otherwise. When the system prompt appears, choose "Precise" (or "Always Allow Precise Location")
+          so guardians get your exact position, not just your general area.
         </Text>
       </GlassCard>
 
