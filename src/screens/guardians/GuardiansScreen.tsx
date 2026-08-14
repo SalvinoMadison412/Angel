@@ -42,12 +42,6 @@ export function GuardiansScreen() {
                 <Text style={styles.meta}>
                   {(guardian.relationship ?? "GUARDIAN").toUpperCase()} · {guardian.phone}
                 </Text>
-                {/* Every saved guardian is notified — no opt-in step, no
-                    pending state — so the status is always this one line. */}
-                <View style={styles.statusRow}>
-                  <View style={styles.statusDot} />
-                  <Text style={styles.statusLabel}>Will receive crash alerts</Text>
-                </View>
               </View>
               <View style={styles.handle}>
                 <Pressable onPress={() => move(index, -1)} hitSlop={8}>
@@ -83,9 +77,6 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
   name: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 15 },
   meta: { color: colors.textDim, fontSize: 12, marginTop: 4, fontFamily: type.label.fontFamily },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
-  statusDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.success },
-  statusLabel: { color: colors.textDim, fontSize: 11, fontFamily: type.label.fontFamily },
   handle: { alignItems: "center", gap: 2 },
   handleArrow: { color: colors.textMuted, fontSize: 14 },
   addCard: {
