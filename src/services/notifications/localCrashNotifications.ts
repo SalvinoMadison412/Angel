@@ -29,7 +29,6 @@ export async function configureCrashNotificationChannel(): Promise<void> {
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 500, 250, 500, 250, 500],
     lightColor: "#FF5722",
-    sound: "default",
   });
 }
 

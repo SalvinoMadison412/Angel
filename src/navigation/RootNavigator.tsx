@@ -5,8 +5,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, AppState, Animated, StyleSheet } from "react-native";
 import { AppTabs } from "./AppTabs";
 import { AuthNavigator } from "./AuthNavigator";
-import { AnimatedSplash } from "../components";
+import { AnimatedSplash, InAppAlertHost, PermissionBanner } from "../components";
 import { OnboardingScreen } from "../screens/onboarding/OnboardingScreen";
+import { PermissionsGateScreen } from "../screens/onboarding/PermissionsGateScreen";
 import { DeviceSetupScreen } from "../screens/device/DeviceSetupScreen";
 import { CalibrateSensorScreen } from "../screens/device/CalibrateSensorScreen";
 import { CrashAlertScreen } from "../screens/crash/CrashAlertScreen";
@@ -22,14 +23,28 @@ import { useCrashDetector } from "../hooks/useCrashDetector";
 import { useDevice } from "../hooks/useDevice";
 import { useProfile } from "../hooks/useProfile";
 import { CrashEvent } from "../services/bluetooth";
-import { DEFAULT_COUNTDOWN_SECONDS, flushPendingDispatches, shouldTriggerAlert } from "../services/emergency";
+import {
+  DEFAULT_COUNTDOWN_SECONDS,
+  flushPendingDispatches,
+  requestCountdownCancel,
+  shouldTriggerAlert,
+} from "../services/emergency";
 import { refreshLocationPermissionStatus } from "../services/location/locationTracking";
 import {
+  CANCEL_ALERT_ACTION_ID,
+  configureAngelSafetyChannels,
+  configureCountdownNotificationCategory,
+  configureCrashNotificationChannel,
   crashEventFromNotificationResponse,
   dismissActiveMonitoringNotification,
+  dismissCountdownNotification,
+  isCountdownNotificationResponse,
+  isCrashConfirmedNotificationResponse,
   presentActiveMonitoringNotification,
   presentCrashNotification,
 } from "../services/notifications";
+import { isPermissionsGateComplete, refreshPermissionSnapshot } from "../services/permissions/permissionsStatus";
+import { startSpeedMonitor, stopSpeedMonitor } from "../services/telemetry/speedMonitor";
 import { colors } from "../theme";
 
 // The animation's own on-screen time — kept in sync with AnimatedSplash's
@@ -156,14 +171,44 @@ function CrashDetectorListener() {
   useEffect(() => {
     // getLastNotificationResponseAsync() (cold start) and the live listener
     // below both resolve asynchronously and can both fire for the exact
-    // same tap — order between them isn't guaranteed. Dedupe by the
-    // notification's own request identifier, whichever callback sees it
-    // first, rather than assuming one always resolves before the other.
-    const handledIds = new Set<string>();
+    // same tap — order between them isn't guaranteed. Dedupe by request
+    // identifier + action + post date (not identifier alone): the countdown
+    // notification below reuses one fixed identifier across every second it
+    // reschedules, and across separate crashes, so identifier-only dedup
+    // would silently swallow a second, later cancel tap.
+    const handledResponses = new Set<string>();
     const handleResponse = (response: Notifications.NotificationResponse | null) => {
       const id = response?.notification.request.identifier;
-      if (!id || handledIds.has(id)) return;
-      handledIds.add(id);
+      if (!id) return;
+      const key = `${id}:${response.actionIdentifier}:${response.notification.date}`;
+      if (handledResponses.has(key)) return;
+      handledResponses.add(key);
+
+      // "CANCEL ALERT" on the ticking countdown notification — stop the
+      // countdown the same way the in-app cancel button does (see
+      // countdownControl.ts) and take the notification down immediately;
+      // the countdown screen's own cancel path also dismisses it, but doing
+      // it here too means it disappears even if that screen somehow isn't
+      // mounted when this fires.
+      if (isCountdownNotificationResponse(response) && response.actionIdentifier === CANCEL_ALERT_ACTION_ID) {
+        dismissCountdownNotification().catch((err) =>
+          console.warn("[notifications] failed to dismiss countdown notification on cancel", err)
+        );
+        requestCountdownCancel();
+        return;
+      }
+
+      // The "guardian alert sent" confirmation (angelAlerts.ts) fires after
+      // the countdown already resolved — there's nothing left to check into,
+      // so tapping it just opens Home, unlike the earlier "tap to check in"
+      // notification below which still routes to the live alert screen.
+      if (isCrashConfirmedNotificationResponse(response)) {
+        // "Tabs" has no params of its own, but Home is AppTabs' first (and
+        // default-initial) tab, so this lands exactly on Home.
+        navigation.navigate("Tabs");
+        return;
+      }
+
       const event = crashEventFromNotificationResponse(response);
       if (event) navigateToCrashAlert(navigation, event);
     };
@@ -197,6 +242,56 @@ function LocationPermissionMonitor() {
   return null;
 }
 
+// Refreshes the full permission snapshot (notifications, location, BLE —
+// see permissionsStatus.ts) on the same schedule as LocationPermissionMonitor
+// above, so PermissionBanner reflects a permission revoked from system
+// Settings without the app needing to be told directly. Separate from
+// LocationPermissionMonitor rather than folded into it: that one exists
+// specifically to drive the live GPS watch, this one is read-only status.
+function PermissionSnapshotMonitor() {
+  useEffect(() => {
+    refreshPermissionSnapshot();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshPermissionSnapshot();
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return null;
+}
+
+// Speed alerts only make sense once there's a live GPS speed reading to
+// watch — starts/stops with the same location-permission signal
+// LocationPermissionMonitor drives, so it doesn't spin up a watch of its
+// own or fire alerts off a null/stale speed.
+function SpeedMonitorController() {
+  useEffect(() => {
+    startSpeedMonitor();
+    return () => stopSpeedMonitor();
+  }, []);
+
+  return null;
+}
+
+// Registers notification channels/categories unconditionally on every cold
+// start — not just inside PermissionsGateScreen, which only ever mounts on
+// a rider's very first launch. Android channels are a one-time OS-level
+// registration that would survive skipping this on later launches, but the
+// countdown notification's category (configureCountdownNotificationCategory)
+// backs the "CANCEL ALERT" action button and must exist before any
+// notification referencing it is scheduled, so this can't be gated behind
+// "first launch only." None of this requires the notifications permission
+// to already be granted — channel/category creation is independent of it.
+function NotificationBootstrap() {
+  useEffect(() => {
+    configureCrashNotificationChannel();
+    configureAngelSafetyChannels();
+    configureCountdownNotificationCategory();
+  }, []);
+
+  return null;
+}
+
 function AppNavigator() {
   return (
     <>
@@ -222,6 +317,10 @@ function AppNavigator() {
       </Stack.Navigator>
       <CrashDetectorListener />
       <LocationPermissionMonitor />
+      <PermissionSnapshotMonitor />
+      <SpeedMonitorController />
+      <PermissionBanner />
+      <InAppAlertHost />
     </>
   );
 }
@@ -229,6 +328,15 @@ function AppNavigator() {
 export function RootNavigator() {
   const { session, initializing } = useAuth();
   const profile = useProfile();
+
+  // First-launch permissions gate (PermissionsGateScreen) — `null` while
+  // unknown, so nothing renders in its place until we actually know whether
+  // it's needed. Runs ahead of Auth/Onboarding/App alike, per AGENTS.md's
+  // "before anything else."
+  const [permissionsGateDone, setPermissionsGateDone] = useState<boolean | null>(null);
+  useEffect(() => {
+    isPermissionsGateComplete().then(setPermissionsGateDone);
+  }, []);
 
   // `null` until we know — the min-duration timer waits for this so it
   // never starts counting against the wrong duration.
@@ -259,7 +367,7 @@ export function RootNavigator() {
   // hasn't loaded yet — either way we don't know which of Auth/Onboarding/
   // App to show, so this counts the same as "still resolving" for the
   // splash gate.
-  const stillResolving = initializing || (Boolean(session) && profile.isLoading);
+  const stillResolving = permissionsGateDone === null || initializing || (Boolean(session) && profile.isLoading);
 
   useEffect(() => {
     // Concurrent with the animation, not after it — this only ever adds
@@ -285,7 +393,16 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      {!session ? <AuthNavigator /> : needsOnboarding ? <OnboardingScreen /> : <AppNavigator />}
+      <NotificationBootstrap />
+      {permissionsGateDone === null ? null : !permissionsGateDone ? (
+        <PermissionsGateScreen onComplete={() => setPermissionsGateDone(true)} />
+      ) : !session ? (
+        <AuthNavigator />
+      ) : needsOnboarding ? (
+        <OnboardingScreen />
+      ) : (
+        <AppNavigator />
+      )}
       {!splashUnmounted && (
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
           <AnimatedSplash reduceMotion={!!reduceMotion} />

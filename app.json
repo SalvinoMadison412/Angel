@@ -21,6 +21,7 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "BLUETOOTH_SCAN",
         "BLUETOOTH_CONNECT",
         "POST_NOTIFICATIONS"
@@ -33,7 +34,9 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Angel needs your precise location to send your exact position to guardians in a crash emergency."
+          "locationWhenInUsePermission": "Angel needs your precise location to send your exact position to guardians in a crash emergency.",
+          "locationAlwaysPermission": "Angel needs to keep watching your location in the background so a crash that happens while your phone is locked still gets an accurate location attached.",
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       [
@@ -44,7 +47,13 @@
       ],
       "expo-secure-store",
       "expo-font",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-foreground.png",
+          "color": "#FF4500"
+        }
+      ],
       [
         "expo-image-picker",
         {

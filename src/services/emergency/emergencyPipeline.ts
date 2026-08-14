@@ -2,7 +2,7 @@ import { File, Paths } from "expo-file-system";
 import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { CrashEvent } from "../bluetooth";
-import { MedicalSnapshot, notificationService } from "../notifications";
+import { MedicalSnapshot, notificationService, presentCrashConfirmedAlert } from "../notifications";
 import { getLastKnownCoords } from "../location/locationTracking";
 import { Guardian, Incident } from "../../types/database";
 
@@ -234,6 +234,12 @@ export async function confirmIncident({ event, userId, deviceId, guardians }: Co
     }
   }
 
+  // Rider-facing confirmation that the alert actually went out — additive on
+  // top of the guardian SMS/log above, never blocking it. See angelAlerts.ts.
+  presentCrashConfirmedAlert().catch((err) =>
+    console.warn("[notifications] failed to present crash-confirmed alert", err)
+  );
+
   return incident;
 }
 
@@ -264,7 +270,7 @@ export async function sendGuardianAlert({ event, userId }: SendGuardianAlertInpu
 
   const { lat, lng } = await captureCurrentLocation();
 
-  return invokeNotifyGuardians({
+  const result = await invokeNotifyGuardians({
     userId,
     severity: event.severity,
     receivedAt: event.receivedAt,
@@ -272,4 +278,10 @@ export async function sendGuardianAlert({ event, userId }: SendGuardianAlertInpu
     lng,
     reason: "missed_checkin",
   });
+
+  presentCrashConfirmedAlert().catch((err) =>
+    console.warn("[notifications] failed to present crash-confirmed alert", err)
+  );
+
+  return result;
 }

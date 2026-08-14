@@ -6,7 +6,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
 import { useAuth, useGuardians } from "../../hooks";
 import { initialsFor } from "../../hooks/useGuardians";
-import { EMERGENCY_COUNTDOWN_SECONDS, cancelCrashEvent, sendGuardianAlert } from "../../services/emergency";
+import {
+  EMERGENCY_COUNTDOWN_SECONDS,
+  cancelCrashEvent,
+  sendGuardianAlert,
+  subscribeCountdownCancel,
+} from "../../services/emergency";
+import { dismissCountdownNotification, presentCountdownNotification } from "../../services/notifications";
 import { remainingCountdownSeconds, triggerDescription } from "../../lib/crashSignals";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
@@ -49,6 +55,15 @@ export function EmergencyCountdownScreen() {
   const sendAlert = async () => {
     setPhase("sending");
     setErrorMessage(null);
+
+    // The countdown is over (or being skipped early via "SEND HELP NOW")
+    // and the alert is firing — the ticking cancel notification no longer
+    // applies. Dismissed up front, before the network call below, so it
+    // disappears the instant sending actually starts.
+    dismissCountdownNotification().catch((err) =>
+      console.warn("[notifications] failed to dismiss countdown notification on send", err)
+    );
+
     if (!session?.user.id) {
       // Shouldn't happen — this screen only exists behind an authenticated
       // session — but there's no rider to attribute the alert to.
@@ -73,6 +88,13 @@ export function EmergencyCountdownScreen() {
       sendAlert();
       return;
     }
+    // Fires the moment the countdown starts (this effect's first run, on
+    // mount) and again every tick after — see countdownNotification.ts for
+    // why re-posting under the same identifier every second is safe (no
+    // repeat heads-up/sound on Android).
+    presentCountdownNotification(secondsLeft, EMERGENCY_COUNTDOWN_SECONDS).catch((err) =>
+      console.warn("[notifications] failed to present countdown notification", err)
+    );
     const id = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,9 +122,26 @@ export function EmergencyCountdownScreen() {
   const handleOkay = async () => {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
+    dismissCountdownNotification().catch((err) =>
+      console.warn("[notifications] failed to dismiss countdown notification on cancel", err)
+    );
     await cancelCrashEvent(event);
     navigation.goBack();
   };
+
+  // A "CANCEL ALERT" tap on the countdown notification is handled globally
+  // in RootNavigator, which has no direct reference to this screen —
+  // subscribing here runs the exact same cancel path a rider tapping "I'M
+  // OK" in-app would. resolvedRef's guard inside handleOkay means whichever
+  // fires first (notification or in-app button) wins and the other becomes
+  // a no-op.
+  useEffect(() => {
+    const unsubscribe = subscribeCountdownCancel(() => {
+      handleOkay();
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // "SEND HELP NOW" just calls the same sendAlert the countdown itself
   // calls on expiry — tapped early (phase === "counting"), it must set

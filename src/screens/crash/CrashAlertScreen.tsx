@@ -5,8 +5,9 @@ import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
 import { useAuth, useDevice, useGuardians } from "../../hooks";
-import { cancelCrashEvent, confirmIncident, queuePendingDispatch } from "../../services/emergency";
+import { cancelCrashEvent, confirmIncident, queuePendingDispatch, subscribeCountdownCancel } from "../../services/emergency";
 import { getLastKnownCoords } from "../../services/location/locationTracking";
+import { dismissCountdownNotification, presentCountdownNotification } from "../../services/notifications";
 import { supabase } from "../../lib/supabase";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
@@ -119,6 +120,15 @@ export function CrashAlertScreen() {
     setResolving(true);
     setDispatchError(null);
 
+    // The countdown is over and the alert is firing — the ticking cancel
+    // notification (countdownNotification.ts) no longer applies. Dismissed
+    // up front, before the (possibly slow) network dispatch below, so it
+    // disappears the instant the countdown actually ends, not whenever the
+    // request happens to finish.
+    dismissCountdownNotification().catch((err) =>
+      console.warn("[notifications] failed to dismiss countdown notification on dispatch", err)
+    );
+
     if (!session?.user.id) {
       // Shouldn't happen — this screen only exists behind an authenticated
       // session — but bail safely rather than writing an orphaned incident.
@@ -186,6 +196,13 @@ export function CrashAlertScreen() {
       dispatch();
       return;
     }
+    // Fires the moment the countdown starts (this effect's first run, on
+    // mount) and again every tick after — see countdownNotification.ts for
+    // why re-posting under the same identifier every second is safe (no
+    // repeat heads-up/sound on Android).
+    presentCountdownNotification(secondsLeft, totalSeconds).catch((err) =>
+      console.warn("[notifications] failed to present countdown notification", err)
+    );
     const id = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,6 +218,9 @@ export function CrashAlertScreen() {
   const handleCancel = async () => {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
+    dismissCountdownNotification().catch((err) =>
+      console.warn("[notifications] failed to dismiss countdown notification on cancel", err)
+    );
     await cancelCrashEvent(event);
 
     const ticketId = await ticketPromiseRef.current;
@@ -214,6 +234,20 @@ export function CrashAlertScreen() {
 
     navigation.goBack();
   };
+
+  // A "CANCEL ALERT" tap on the countdown notification is handled globally
+  // in RootNavigator, which has no direct reference to this screen —
+  // subscribing here runs the exact same cancel path a rider tapping the
+  // in-app button would. resolvedRef's guard inside handleCancel means
+  // whichever fires first (notification or in-app button) wins and the
+  // other becomes a no-op.
+  useEffect(() => {
+    const unsubscribe = subscribeCountdownCancel(() => {
+      handleCancel();
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const chipGuardians = (guardians ?? []).slice(0, 3);
   const extraCount = Math.max(0, (guardians?.length ?? 0) - chipGuardians.length);

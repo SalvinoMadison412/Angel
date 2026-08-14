@@ -1,10 +1,16 @@
 import { useNavigation } from "@react-navigation/native";
-import React from "react";
+import React, { useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { GlassCard, ScreenBackground, ScreenHeader } from "../../components";
-import { useCrashDetector, useCrashDetectorTelemetry } from "../../hooks";
+import { GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
+import { useCrashDetector, useCrashDetectorTelemetry, usePermissionSnapshot } from "../../hooks";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation } from "../../navigation/types";
+import { publishInAppAlert } from "../../services/notifications/inAppAlertBus";
+import { presentCrashConfirmedAlertForPreview, presentSpeedAlertForPreview } from "../../services/notifications/angelAlerts";
+import { dismissCountdownNotification, presentCountdownNotification } from "../../services/notifications/countdownNotification";
+import { triggerDebugPermissionBanner } from "../../services/permissions/debugBanner";
+
+const COUNTDOWN_PREVIEW_TOTAL_SECONDS = 10;
 
 // TEMP DIAGNOSTIC SCREEN — shows the raw values the app has actually
 // received from the device over BLE, live, updating the instant a new
@@ -19,6 +25,34 @@ export function DiagnosticScreen() {
   const navigation = useNavigation<RootStackNavigation>();
   const { isLinked, isReconnecting, lastEvent, fault, calibrationConfirmation } = useCrashDetector();
   const telemetry = useCrashDetectorTelemetry();
+  const permissions = usePermissionSnapshot();
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Drives the real presentCountdownNotification() on a short local tick —
+  // not a real CrashEvent, just enough to see the notification actually
+  // count down and confirm CANCEL ALERT works from the shade. Stops itself
+  // at zero; the STOP button below also clears it early.
+  const startCountdownPreview = () => {
+    if (countdownTimer.current) clearInterval(countdownTimer.current);
+    let secondsLeft = COUNTDOWN_PREVIEW_TOTAL_SECONDS;
+    presentCountdownNotification(secondsLeft, COUNTDOWN_PREVIEW_TOTAL_SECONDS);
+    countdownTimer.current = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        if (countdownTimer.current) clearInterval(countdownTimer.current);
+        countdownTimer.current = null;
+        dismissCountdownNotification();
+        return;
+      }
+      presentCountdownNotification(secondsLeft, COUNTDOWN_PREVIEW_TOTAL_SECONDS);
+    }, 1000);
+  };
+
+  const stopCountdownPreview = () => {
+    if (countdownTimer.current) clearInterval(countdownTimer.current);
+    countdownTimer.current = null;
+    dismissCountdownNotification();
+  };
 
   return (
     <ScreenBackground scroll contentStyle={styles.content}>
@@ -29,6 +63,78 @@ export function DiagnosticScreen() {
           This screen updates live as raw messages arrive over BLE. Leave it open, then trigger the sensor (tap it,
           or tap Recalibrate) and watch for a new value below.
         </Text>
+
+        {/* __DEV__-gated on top of this screen's own __DEV__-only entry point
+            (see the "VIEW RAW BLE DATA" button in DeviceScreen.tsx) — belt
+            and suspenders, since this fires real local notifications and a
+            fake permission-revoked banner that a production build should
+            never be able to trigger. */}
+        {__DEV__ && (
+          <Section title="NOTIFICATION PREVIEW">
+            <Text style={[type.bodySmall, styles.hint, styles.previewHint]}>
+              Fires each notification/banner exactly as production code would — check title, body, icon, color, and
+              placement against the AGENTS.md spec.
+            </Text>
+            <PillButton
+              title="TEST CRASH NOTIFICATION"
+              variant="outline"
+              onPress={() => presentCrashConfirmedAlertForPreview()}
+              style={styles.testButton}
+            />
+            <PillButton
+              title="TEST SPEED ALERT"
+              variant="outline"
+              onPress={() => presentSpeedAlertForPreview()}
+              style={styles.testButton}
+            />
+            <PillButton
+              title="TEST IN-APP BANNER (CRASH)"
+              variant="outline"
+              onPress={() =>
+                publishInAppAlert(
+                  "crash",
+                  "⚠️ ANGEL — CRASH DETECTED",
+                  "A crash has been detected. Guardian alert sent. Tap to open Angel."
+                )
+              }
+              style={styles.testButton}
+            />
+            <PillButton
+              title="TEST IN-APP BANNER (SPEED)"
+              variant="outline"
+              onPress={() =>
+                publishInAppAlert("speed", "🏎️ ANGEL — SPEED ALERT", "You are riding above 80 km/h. Ride safe.")
+              }
+              style={styles.testButton}
+            />
+            <PillButton
+              title="TEST PERMISSION BANNER"
+              variant="outline"
+              onPress={() => triggerDebugPermissionBanner()}
+              style={styles.testButton}
+            />
+            <PillButton
+              title="TEST COUNTDOWN NOTIFICATION (10S)"
+              variant="outline"
+              onPress={startCountdownPreview}
+              style={styles.testButton}
+            />
+            <PillButton
+              title="STOP COUNTDOWN NOTIFICATION"
+              variant="outline"
+              onPress={stopCountdownPreview}
+              style={styles.testButton}
+            />
+          </Section>
+        )}
+
+        <Section title="PERMISSIONS">
+          <Row label="notifications" value={String(permissions.notifications)} />
+          <Row label="locationForeground" value={String(permissions.locationForeground)} />
+          <Row label="locationForegroundPrecise" value={String(permissions.locationForegroundPrecise)} />
+          <Row label="locationBackground" value={String(permissions.locationBackground)} />
+          <Row label="bluetooth" value={String(permissions.bluetooth)} />
+        </Section>
 
         <Section title="CONNECTION">
           <Row label="isLinked" value={String(isLinked)} />
@@ -122,6 +228,8 @@ const styles = StyleSheet.create({
   hint: { color: colors.textMuted },
   section: {},
   sectionTitle: { color: colors.accent, marginBottom: spacing.md },
+  testButton: { marginTop: spacing.sm },
+  previewHint: { marginBottom: spacing.sm },
   empty: { color: colors.textDim, ...type.bodySmall },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: spacing.xs },
   rowLabel: { color: colors.textDim, fontFamily: type.label.fontFamily, fontSize: 12 },
