@@ -155,6 +155,22 @@ function buildVoiceMessage(riderName: string, reason: NotifyReason): string {
   );
 }
 
+interface TwilioMessageResource {
+  sid?: string;
+  status?: string;
+  error_code?: number | null;
+  error_message?: string | null;
+}
+
+// Returns the Message resource Twilio's REST API hands back on creation —
+// note this is only the state at creation time (typically "queued" or
+// "accepted"), NOT proof of delivery. A 2xx here means Twilio accepted the
+// request, not that WhatsApp delivered it; actual delivery/failure happens
+// asynchronously and would only be visible via a status-callback webhook or
+// a follow-up GET on this SID. Returned to the caller (rather than just
+// logged) so it round-trips into the client's console log — see
+// emergencyPipeline.ts's invokeNotifyGuardians — since Supabase's edge
+// function console output isn't otherwise easy to inspect after the fact.
 async function sendWhatsAppTemplate(
   twilioSid: string,
   twilioToken: string,
@@ -162,13 +178,14 @@ async function sendWhatsAppTemplate(
   to: string,
   contentSid: string,
   contentVariables: Record<string, string>
-): Promise<void> {
+): Promise<TwilioMessageResource> {
   const form = new URLSearchParams({
     From: from,
     To: to,
     ContentSid: contentSid,
     ContentVariables: JSON.stringify(contentVariables),
   });
+  console.log(`[notify-guardians] WhatsApp request — From=${from} To=${to} ContentSid=${contentSid}`);
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
     method: "POST",
     headers: {
@@ -177,8 +194,15 @@ async function sendWhatsAppTemplate(
     },
     body: form.toString(),
   });
+  const bodyText = await res.text();
+  console.log(`[notify-guardians] WhatsApp response — status=${res.status} body=${bodyText}`);
   if (!res.ok) {
-    throw new Error(`Twilio WhatsApp ${res.status}: ${await res.text()}`);
+    throw new Error(`Twilio WhatsApp ${res.status}: ${bodyText}`);
+  }
+  try {
+    return JSON.parse(bodyText) as TwilioMessageResource;
+  } catch {
+    return {};
   }
 }
 
@@ -193,6 +217,7 @@ async function placeVoiceCall(
   // mid-sentence or is momentarily distracted still hears the full message.
   const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Aditi" loop="3">${escapeXml(message)}</Say></Response>`;
   const form = new URLSearchParams({ From: from, To: to, Twiml: twiml });
+  console.log(`[notify-guardians] Voice request — From=${from} To=${to}`);
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json`, {
     method: "POST",
     headers: {
@@ -201,8 +226,10 @@ async function placeVoiceCall(
     },
     body: form.toString(),
   });
+  const bodyText = await res.text();
+  console.log(`[notify-guardians] Voice response — status=${res.status} body=${bodyText}`);
   if (!res.ok) {
-    throw new Error(`Twilio Voice ${res.status}: ${await res.text()}`);
+    throw new Error(`Twilio Voice ${res.status}: ${bodyText}`);
   }
 }
 
@@ -235,6 +262,17 @@ Deno.serve(async (req) => {
         500
       );
     }
+
+    // Sanity-log what each secret resolved to (never the token itself —
+    // only its length, so a truncated/misconfigured secret is visible
+    // without printing the credential to logs).
+    console.log(
+      `[notify-guardians] env check — TWILIO_ACCOUNT_SID=${twilioSid} ` +
+        `TWILIO_AUTH_TOKEN.length=${twilioToken.length} ` +
+        `TWILIO_WHATSAPP_NUMBER=${twilioWhatsAppNumber} ` +
+        `TWILIO_VOICE_NUMBER=${twilioVoiceNumber} ` +
+        `TWILIO_TEMPLATE_SID=${twilioTemplateSid}`
+    );
 
     // Authenticate the caller from their own session token rather than
     // trusting the request body's rider_id outright — otherwise anyone
@@ -287,21 +325,40 @@ Deno.serve(async (req) => {
 
     const whatsAppFrom = toWhatsAppAddress(twilioWhatsAppNumber);
     const list = guardians ?? [];
+    console.log(
+      `[notify-guardians] resolved ${list.length} guardian(s) for rider ${body.rider_id}: ` +
+        `${list.map((g) => `${g.name} <${g.phone}>`).join(", ") || "(none)"}`
+    );
 
     // Phase 1 — WhatsApp to every guardian in parallel. Awaited: this is
     // the part of the response the caller (confirmIncident /
     // sendGuardianAlert in emergencyPipeline.ts) actually needs promptly.
     let whatsAppSent = 0;
     const whatsAppFailures: string[] = [];
+    // Per-guardian Twilio Message resource (sid/status/error_code) — see
+    // sendWhatsAppTemplate's comment on why this is returned to the caller
+    // instead of only logged: it's the only way to see whether Twilio
+    // actually queued the message vs rejected it asynchronously (e.g. trial
+    // account number restrictions, closed WhatsApp session window) without
+    // separate access to this function's own console output.
+    const whatsAppResults: Array<{ guardian: string } & TwilioMessageResource> = [];
 
     await Promise.all(
       list.map(async (guardian) => {
         const guardianE164 = toE164(guardian.phone);
         try {
-          await sendWhatsAppTemplate(twilioSid, twilioToken, whatsAppFrom, toWhatsAppAddress(guardianE164), twilioTemplateSid, {
-            "1": riderName,
-            "2": mapsLink,
-          });
+          const result = await sendWhatsAppTemplate(
+            twilioSid,
+            twilioToken,
+            whatsAppFrom,
+            toWhatsAppAddress(guardianE164),
+            twilioTemplateSid,
+            {
+              "1": riderName,
+              "2": mapsLink,
+            }
+          );
+          whatsAppResults.push({ guardian: guardian.name, ...result });
           whatsAppSent += 1;
           console.log(`[notify-guardians] WhatsApp sent to ${guardian.name} (${guardian.id})`);
         } catch (err) {
@@ -318,7 +375,9 @@ Deno.serve(async (req) => {
     // alert isn't held open for 30+ extra seconds waiting on a backup call
     // that exists specifically for the case WhatsApp silently failed.
     const backupCalls = (async () => {
+      console.log(`[notify-guardians] backup call phase scheduled — waiting 30s (${list.length} guardian(s))`);
       await new Promise((resolve) => setTimeout(resolve, 30_000));
+      console.log(`[notify-guardians] backup call phase starting now`);
       await Promise.all(
         list.map(async (guardian) => {
           const guardianE164 = toE164(guardian.phone);
@@ -346,6 +405,7 @@ Deno.serve(async (req) => {
       total: list.length,
       whatsAppSent,
       whatsAppFailures,
+      whatsAppResults,
     });
   } catch (err) {
     console.error("[notify-guardians] error", err);

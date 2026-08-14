@@ -62,6 +62,7 @@ async function invokeNotifyGuardians(input: {
     }
     throw error;
   }
+  console.log("[emergency] notify-guardians response", JSON.stringify(data));
   // `whatsAppSent` reflects the immediate-phase result only — the edge
   // function's backup voice calls fire 30s later in the background (via
   // EdgeRuntime.waitUntil) and aren't reflected in this response.
