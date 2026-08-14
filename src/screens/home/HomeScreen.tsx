@@ -1,7 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
 import React from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
-import { GlassCard, HoloMotorcycle, ScreenBackground, SeverityMeter, StatTile } from "../../components";
+import { GlassCard, LightCycleVisual, ScreenBackground, SeverityMeter, StatTile } from "../../components";
 import { useCrashDetector, useCrashDetectorTelemetry, useGuardians, useLocationPermission } from "../../hooks";
 import { SEVERITY_LABELS, triggerDescription, triggerHeadline } from "../../lib/crashSignals";
 import { colors, fontFamily, severityColor, spacing, type } from "../../theme";
@@ -37,7 +37,6 @@ export function HomeScreen() {
   // moment the sensor actually disconnects, which is exactly the bug this
   // badge exists to avoid. `isLinked` is debounced (see useCrashDetector)
   // so a sub-2s reconnect blip doesn't flash this whole badge off and on.
-  const leanDeg = lastEvent && lastEvent.calibrated ? lastEvent.tilt / 4 : 0;
   const connectionLabel = isReconnecting ? "RECONNECTING…" : isLinked ? "DEVICE CONNECTED" : "DEVICE NOT CONNECTED";
   const sensorLabel = isReconnecting ? "RECONNECTING…" : isLinked ? "SENSOR OK" : "SENSOR OFFLINE";
 
@@ -89,7 +88,7 @@ export function HomeScreen() {
           <Text style={[type.kicker, isLinked ? styles.sensorOk : styles.dimText]}>{sensorLabel}</Text>
         </View>
         <View style={styles.motifWrap}>
-          <HoloMotorcycle leanDeg={leanDeg} />
+          <LightCycleVisual tilt={telemetry?.tilt ?? 0} isLinked={isLinked} />
         </View>
       </GlassCard>
 
@@ -265,7 +264,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   sensorOk: { color: colors.accent },
-  motifWrap: { alignItems: "center", paddingVertical: spacing.xl },
+  motifWrap: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   readingCard: {},
   emptyReading: { color: colors.textDim, marginTop: spacing.md },
   readingSeverityRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md },

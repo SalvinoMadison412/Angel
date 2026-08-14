@@ -8,6 +8,7 @@ export * from "./ScreenHeader";
 export * from "./StepProgress";
 export * from "./SeverityMeter";
 export * from "./HoloMotorcycle";
+export * from "./LightCycleVisual";
 export * from "./GyroDial";
 export * from "./RadialCountdown";
 export * from "./SchematicRouteMap";
