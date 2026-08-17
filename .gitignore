@@ -43,3 +43,9 @@ yarn-error.*
 
 # release signing — never commit; back this up somewhere safe outside git
 /keystores/
+
+# IDE
+/.idea/
+
+# Supabase CLI local state
+supabase/.temp/
