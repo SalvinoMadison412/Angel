@@ -103,13 +103,14 @@ export function OtpScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <PillButton
-        title="VERIFY"
-        onPress={handleVerify}
-        disabled={code.length !== CODE_LENGTH}
-        loading={loading}
-        style={styles.cta}
-      />
+      <View style={styles.ctaWrap}>
+        <PillButton
+          title="VERIFY"
+          onPress={handleVerify}
+          disabled={code.length !== CODE_LENGTH}
+          loading={loading}
+        />
+      </View>
     </ScreenBackground>
     </KeyboardAvoidingView>
   );
@@ -170,5 +171,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     marginTop: spacing.md,
   },
-  cta: { marginHorizontal: spacing.xl, marginTop: spacing.xl },
+  ctaWrap: { paddingHorizontal: spacing.xl, marginTop: spacing.xl },
 });
