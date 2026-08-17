@@ -18,3 +18,4 @@ export * from "./TabBarIcon";
 export * from "./AnimatedSplash";
 export * from "./AlertBanner";
 export * from "./PermissionBanner";
+export * from "./ConfirmModal";

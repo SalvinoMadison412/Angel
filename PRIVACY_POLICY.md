@@ -43,7 +43,7 @@ Each of these processes data only as needed to provide the functionality above, 
 
 ## Data retention & deletion
 
-Your account data, guardians, medical profile, incident history (including raw sensor readings), and profile photo are retained while your account is active. You can delete your account and associated data at any time by contacting us (see below); emergency medical information and guardian contact details are removed immediately on request. The on-device sensor-event log described above lives only on your phone and is cleared if you uninstall the app.
+Your account data, guardians, medical profile, incident history (including raw sensor readings), and profile photo are retained while your account is active. You can delete your account and all associated data at any time directly within the app — go to **Profile → Settings → Delete account**. Deletion removes your profile, guardian list, emergency medical information, and incident history from our servers immediately and permanently. The on-device sensor-event log described above lives only on your phone and is cleared if you uninstall the app. You may also request deletion by emailing us at the address below.
 
 ## Permissions this app requests, and why
 

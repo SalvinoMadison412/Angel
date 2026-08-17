@@ -9,3 +9,4 @@ export * from "./useLocationPermission";
 export * from "./useCrashDetector";
 export * from "./useEmergencyProfile";
 export * from "./usePermissionSnapshot";
+export * from "./useAccountDeletion";

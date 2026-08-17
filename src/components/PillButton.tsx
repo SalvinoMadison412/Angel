@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { colors, radius, spacing, type } from "../theme";
 
-type Variant = "primary" | "inverse" | "outline" | "ghost";
+type Variant = "primary" | "inverse" | "outline" | "ghost" | "danger";
 
 interface Props {
   title: string;
@@ -46,7 +46,7 @@ export function PillButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "inverse" ? colors.bg : colors.text} />
+        <ActivityIndicator color={variant === "inverse" ? colors.bg : variant === "danger" ? "#FFFFFF" : colors.text} />
       ) : (
         <Text style={[styles.label, textVariantStyles[variant]]} numberOfLines={1}>
           {title}
@@ -83,6 +83,7 @@ const variantStyles: Record<Variant, ViewStyle> = StyleSheet.create({
   inverse: { backgroundColor: colors.text },
   outline: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.glassBorder },
   ghost: { backgroundColor: "transparent" },
+  danger: { backgroundColor: colors.danger },
 });
 
 const textVariantStyles: Record<Variant, { color: string }> = {
@@ -90,6 +91,7 @@ const textVariantStyles: Record<Variant, { color: string }> = {
   inverse: { color: colors.bg },
   outline: { color: colors.text },
   ghost: { color: colors.accent },
+  danger: { color: "#FFFFFF" },
 };
 
 export function ButtonRow({ children }: { children: React.ReactNode }) {

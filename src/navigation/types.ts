@@ -13,6 +13,8 @@ export type AuthStackNavigation = NativeStackNavigationProp<AuthStackParamList>;
 export type ProfileStackParamList = {
   ProfileHome: undefined;
   Plan: undefined;
+  Settings: undefined;
+  EditProfile: undefined;
 };
 
 export type ProfileStackNavigation = NativeStackNavigationProp<ProfileStackParamList>;
