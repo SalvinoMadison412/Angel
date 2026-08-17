@@ -19,14 +19,14 @@
 </head>
 <body>
 <h1>Angel — Privacy Policy</h1>
-<div class="updated">Last updated: August 10, 2026</div>
+<div class="updated">Last updated: August 17, 2026</div>
 
 <p>Angel ("Angel", "we", "us") provides a two-wheeler crash-detection app that pairs with a wearable sensor, detects possible crashes, and alerts your emergency contacts. This policy explains what data Angel collects, why, and how it's handled.</p>
 
 <h2>Data we collect</h2>
 <p><strong>Account information.</strong> Your phone number (used to sign in via SMS one-time passcode) or, if you choose Google Sign-In, the name and email address Google provides.</p>
 <p><strong>Profile photo (optional).</strong> If you choose to add one, a profile picture you pick from your photo gallery. Angel never requests camera access for this — only your existing photo library. Stored in our cloud storage provider (Supabase Storage) and displayed back to you in the app; not shared with guardians or any other party.</p>
-<p><strong>Location.</strong> Foreground GPS location is captured at the moment a crash alert is triggered or confirmed, so it can be included in the alert sent to your guardians. We do not track or store your location at any other time.</p>
+<p><strong>Location.</strong> Angel continuously monitors your precise GPS location in the background while the app is running — including when your phone is locked or the screen is off — so that an accurate location fix is available immediately if a crash is detected at any time. This background location is not stored or logged continuously; it is captured and transmitted to your guardians only at the moment a crash alert is confirmed and not cancelled. We do not use your location for advertising or share it with any party other than your guardians and Twilio (solely to generate the alert message).</p>
 <p><strong>Bluetooth / sensor data.</strong> Angel pairs with your Angel crash-sensor device over Bluetooth Low Energy. Impact force, rotation, tilt, and "stillness" readings from the sensor are used to detect and classify possible crashes, and to support cancelling a false alarm. A copy of these raw readings is also kept in a log stored locally on your device (not uploaded anywhere) so crash-detection accuracy can be reviewed and improved over time; this local log is not currently deleted automatically.</p>
 <p><strong>Emergency contacts ("guardians").</strong> Names and phone numbers you add are stored so Angel can reach them the moment a crash alert isn't cancelled in time — by WhatsApp message and by an automated phone call, both sent automatically with no separate opt-in step required from the guardian.</p>
 <p><strong>Emergency medical profile (optional).</strong> If you choose to provide it, your blood group and any medical conditions are stored for your own reference in the app. This information is not currently shared with anyone else — including guardians, or a trained responder — as part of any automated alert; it exists to support a future responder-dispatch feature, not the current release.</p>
@@ -47,15 +47,18 @@
 <p><strong>Supabase</strong> hosts our database, authentication, file storage, and backend functions. <strong>Twilio</strong> delivers the WhatsApp message and places the automated phone call to your guardians — only the guardian's name and phone number, and the alert message/call script (which includes a Google Maps link to your last known location) are sent to Twilio, never your medical profile, never another guardian's details. <strong>Google</strong> provides optional Sign-In and, where used, map display. Each processes data only as needed to provide the functionality above, under their own security and privacy commitments.</p>
 
 <h2>Data retention &amp; deletion</h2>
-<p>Your account data, guardians, medical profile, incident history (including raw sensor readings), and profile photo are retained while your account is active. You can delete your account and associated data at any time by contacting us below; emergency medical information and guardian contact details are removed immediately on request. The on-device sensor-event log described above lives only on your phone and is cleared if you uninstall the app.</p>
+<p>Your account data, guardians, medical profile, incident history (including raw sensor readings), and profile photo are retained while your account is active. You can delete your account and associated data at any time by contacting us (see below); emergency medical information and guardian contact details are removed immediately on request. The on-device sensor-event log described above lives only on your phone and is cleared if you uninstall the app.</p>
 
 <h2>Permissions this app requests, and why</h2>
 <table>
   <tr><th>Permission</th><th>Why</th></tr>
-  <tr><td>Location (fine/coarse)</td><td>Attach your location to a crash alert so guardians know where you are</td></tr>
-  <tr><td>Bluetooth (scan/connect)</td><td>Pair with and receive readings from your Angel crash sensor</td></tr>
-  <tr><td>Notifications</td><td>Alert <em>you</em>, on your own phone, if a crash is detected while the app is backgrounded — separate from, and not required for, the WhatsApp message and phone call sent to your guardians</td></tr>
-  <tr><td>Photo library (read-only)</td><td>Let you pick an existing photo to use as your profile picture — Angel never requests camera access</td></tr>
+  <tr><td>Location — precise (fine/coarse)</td><td>Attach your GPS coordinates to a crash alert so guardians know exactly where you are</td></tr>
+  <tr><td>Location — background</td><td>Keep a live location fix available even when your phone is locked or the screen is off, so a crash that happens mid-ride still produces an accurate location in the alert. Angel does not store or use this background location for any other purpose.</td></tr>
+  <tr><td>Bluetooth (scan/connect)</td><td>Discover, pair with, and receive crash-event readings from your Angel sensor device over Bluetooth Low Energy</td></tr>
+  <tr><td>Foreground service / foreground service location</td><td>Run the crash-monitoring service as a persistent foreground process so the OS does not suspend it while you ride — required for background location to function reliably</td></tr>
+  <tr><td>Notifications</td><td>Alert you on your own phone if a crash is detected while the app is backgrounded, and show the cancel-countdown notification — separate from the WhatsApp message and call sent to your guardians</td></tr>
+  <tr><td>Vibrate</td><td>Haptic feedback during the crash-alert countdown and when a guardian confirms receipt</td></tr>
+  <tr><td>Photo library (read-only)</td><td>Let you pick an existing photo for your profile picture — Angel never requests camera access</td></tr>
 </table>
 <p>Angel does not request permissions beyond what's listed above, and does not access your contacts or other apps' data.</p>
 
@@ -66,6 +69,6 @@
 <p>We'll update the "Last updated" date above when this policy changes. Material changes will be communicated to the email or phone number on your account where possible.</p>
 
 <h2>Contact us</h2>
-<p>Questions about this policy or a request to access/delete your data: <a href="mailto:hello@angel.tech">hello@angel.tech</a></p>
+<p>Questions about this policy or a request to access/delete your data: <a href="mailto:salvinokevin7@gmail.com">salvinokevin7@gmail.com</a></p>
 </body>
 </html>
