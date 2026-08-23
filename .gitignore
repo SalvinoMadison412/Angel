@@ -41,6 +41,10 @@ yarn-error.*
 /ios
 /android
 
+# build artifacts — never commit, EAS stores these remotely
+*.apk
+*.aab
+
 # release signing — never commit; back this up somewhere safe outside git
 /keystores/
 
