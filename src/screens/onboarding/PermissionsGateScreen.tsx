@@ -3,7 +3,6 @@ import { Linking, Platform, StyleSheet, Text, View } from "react-native";
 import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
 import {
   requestBluetoothPermission,
-  requestLocationBackgroundPermission,
   requestLocationForegroundPermission,
   requestNotificationsPermission,
   setPermissionsGateComplete,
@@ -14,25 +13,23 @@ interface Props {
   onComplete: () => void;
 }
 
-// Android only past step 2 — background location and BLE runtime
-// permissions don't exist as a concept on iOS the way they do here (iOS
-// grants BLE implicitly at first scan, and Angel doesn't request "Always"
-// location on iOS — see requestLocationBackgroundPermission).
-const STEPS = Platform.OS === "android" ? (["notifications", "location", "background", "bluetooth"] as const) : (["notifications", "location"] as const);
+// Bluetooth runtime permissions don't exist as a concept on iOS the way
+// they do here — iOS grants BLE implicitly at first scan.
+const STEPS = Platform.OS === "android" ? (["location", "notifications", "bluetooth"] as const) : (["location", "notifications"] as const);
 
 type StepId = (typeof STEPS)[number];
 
 /**
  * Runs once, before anything else — first thing a rider sees after signing
  * up, ahead of OnboardingScreen. Every permission Angel depends on
- * (notifications, precise location, background location, BLE) is requested
- * here in sequence, each behind its own explanation screen, and none of
- * them can be skipped: AGENTS.md is explicit that the app must not let a
- * rider proceed without notifications and location enabled, since those are
- * what actually gets a guardian alerted and located after a crash. Grant
- * state is written once via setPermissionsGateComplete() so this never
- * shows again on subsequent launches — PermissionBanner (mounted app-wide)
- * is what covers a permission getting revoked later from system Settings.
+ * (notifications, precise location, BLE) is requested here in sequence,
+ * each behind its own explanation screen, and none of them can be skipped:
+ * AGENTS.md is explicit that the app must not let a rider proceed without
+ * notifications and location enabled, since those are what actually gets a
+ * guardian alerted and located after a crash. Grant state is written once
+ * via setPermissionsGateComplete() so this never shows again on subsequent
+ * launches — PermissionBanner (mounted app-wide) is what covers a
+ * permission getting revoked later from system Settings.
  *
  * Notification channel/category setup used to happen here, but that only
  * ever ran on a rider's very first launch — see NotificationBootstrap in
@@ -60,9 +57,8 @@ export function PermissionsGateScreen({ onComplete }: Props) {
         </Text>
       </View>
 
-      {stepId === "notifications" && <NotificationsStep onGranted={advance} />}
       {stepId === "location" && <LocationForegroundStep onGranted={advance} />}
-      {stepId === "background" && <LocationBackgroundStep onGranted={advance} />}
+      {stepId === "notifications" && <NotificationsStep onGranted={advance} />}
       {stepId === "bluetooth" && <BluetoothStep onGranted={advance} />}
     </ScreenBackground>
   );
@@ -206,45 +202,6 @@ function LocationForegroundStep({ onGranted }: { onGranted: () => void }) {
       ctaLabel="ENABLE LOCATION"
       deniedHeading="Location is off"
       deniedCopy="Without this, guardians can't be told where you are in a crash. Enable location for Angel in Settings to continue."
-      requesting={requesting}
-      denied={denied}
-      onEnable={handleEnable}
-    />
-  );
-}
-
-function LocationBackgroundStep({ onGranted }: { onGranted: () => void }) {
-  const [requesting, setRequesting] = useState(false);
-  const [denied, setDenied] = useState(false);
-
-  const handleEnable = async () => {
-    setRequesting(true);
-    try {
-      const granted = await requestLocationBackgroundPermission();
-      if (granted) {
-        setDenied(false);
-        onGranted();
-      } else {
-        setDenied(true);
-      }
-    } catch (err) {
-      console.warn("[permissions-gate] background location request failed", err);
-      setDenied(true);
-    } finally {
-      setRequesting(false);
-    }
-  };
-
-  return (
-    <GateStep
-      heading="Keep watching in the background"
-      copy="Angel needs to keep tracking your location even when the app isn't on screen, so a crash that happens while your phone is locked still gets an accurate location attached."
-      whyWeAsk={
-        'On the next screen, choose "Allow all the time" (not "While using the app") — anything less means guardians could get a stale or missing location for a crash that happens while you\'re not looking at your phone.'
-      }
-      ctaLabel="ENABLE BACKGROUND LOCATION"
-      deniedHeading="Background location is off"
-      deniedCopy='Choose "Allow all the time" for Angel in Settings to continue — this is required so crash location stays accurate while the app is backgrounded.'
       requesting={requesting}
       denied={denied}
       onEnable={handleEnable}
