@@ -180,9 +180,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    // Wrap rather than squeeze: past a certain label length or font scale
+    // there isn't room for both, and shrinking the label alone breaks it
+    // mid-word. The pill drops to its own line instead.
+    flexWrap: "wrap",
+    gap: spacing.md,
     marginTop: spacing.md,
   },
-  statusText: { color: colors.text },
+  statusText: { color: colors.text, flexShrink: 1 },
   dim: { color: colors.textDim },
   pairedName: { marginTop: spacing.sm },
   errorText: { color: colors.danger, marginTop: spacing.sm },

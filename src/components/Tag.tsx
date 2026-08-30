@@ -25,6 +25,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     alignSelf: "flex-start",
+    // RN flex children default to flexShrink: 0, but say it out loud: every
+    // caller sits this pill in a row beside a variable-length label, and a
+    // squashed pill is how "ACTION NEEDED" ends up clipped into its
+    // neighbour on a narrow screen or at a large system font scale.
+    flexShrink: 0,
   },
 });
 

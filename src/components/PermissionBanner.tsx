@@ -1,9 +1,8 @@
-import React, { useSyncExternalStore } from "react";
+import React from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePermissionSnapshot } from "../hooks/usePermissionSnapshot";
 import { requiredPermissionsGranted } from "../services/permissions/permissionsStatus";
-import { isDebugPermissionBannerActive, subscribeDebugPermissionBanner } from "../services/permissions/debugBanner";
 import { colors, spacing, type } from "../theme";
 
 /**
@@ -15,27 +14,18 @@ import { colors, spacing, type } from "../theme";
  * block touches on the screen behind it (pointerEvents="box-none" on the
  * wrapper) — the gate screen itself is the hard stop for first launch; this
  * is the ongoing reminder once the rest of the app is reachable.
- *
- * `debugForced` (DiagnosticScreen's "Test Permission Banner" button, __DEV__
- * only) previews this without actually needing a revoked permission —
- * separate store (debugBanner.ts) so it can never leak into the real
- * requiredPermissionsGranted() check.
  */
 export function PermissionBanner() {
   const snapshot = usePermissionSnapshot();
-  const debugForced = useSyncExternalStore(subscribeDebugPermissionBanner, isDebugPermissionBannerActive);
   const insets = useSafeAreaInsets();
 
-  const permissionsSatisfied = requiredPermissionsGranted(snapshot);
-  if (permissionsSatisfied && !debugForced) return null;
+  if (requiredPermissionsGranted(snapshot)) return null;
 
+  // Non-empty by construction: requiredPermissionsGranted() is exactly
+  // these two, so reaching here means at least one is missing.
   const missing: string[] = [];
   if (!snapshot.notifications) missing.push("notifications");
   if (!snapshot.locationForeground) missing.push("location");
-  // Real gap is empty (permissions are actually fine) but the debug trigger
-  // forced this on anyway — fall back to the generic pairing the copy
-  // always describes, so the preview reads the same as the real thing.
-  if (missing.length === 0) missing.push("notifications", "location");
 
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { top: insets.top }]}>

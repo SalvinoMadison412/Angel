@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   index: { color: colors.textDim, fontFamily: type.kicker.fontFamily, fontSize: 11, width: 18 },
   info: { flex: 1 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
-  name: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 15 },
+  name: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 15, flexShrink: 1 },
   meta: { color: colors.textDim, fontSize: 12, marginTop: 4, fontFamily: type.label.fontFamily },
   handle: { alignItems: "center", gap: 2 },
   handleArrow: { color: colors.textMuted, fontSize: 14 },

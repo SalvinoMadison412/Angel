@@ -132,9 +132,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    // Wrap rather than squeeze — see DeviceScreen.statusRow.
+    flexWrap: "wrap",
+    gap: spacing.md,
     marginTop: spacing.md,
   },
-  planNote: { color: colors.textMuted },
+  planNote: { color: colors.textMuted, flexShrink: 1 },
   features: { gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.md },
   featureRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   check: { color: colors.accent },

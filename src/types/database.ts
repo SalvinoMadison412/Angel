@@ -3,6 +3,7 @@ export type IncidentStatus = "active" | "cancelled" | "resolved";
 export type AlertMode = "call" | "sms";
 export type SubscriptionTier = 3 | 6 | 12;
 export type BloodGroup = "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-";
+export type HospitalPreference = "government" | "private";
 
 export interface Profile {
   id: string;
@@ -50,6 +51,11 @@ export interface EmergencyProfile {
   date_of_birth: string | null;
   blood_group: BloodGroup | null;
   medical_conditions: string | null;
+  insurance_provider: string | null;
+  insurance_policy_name: string | null;
+  insurance_coverage: string | null;
+  insurance_covered: boolean;
+  hospital_preference: HospitalPreference | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,13 +93,6 @@ export interface Incident {
   assigned_responder_id: string | null;
   created_at: string;
   resolved_at: string | null;
-}
-
-export interface IncidentEvent {
-  id: string;
-  incident_id: string;
-  label: string;
-  occurred_at: string;
 }
 
 export interface Subscription {

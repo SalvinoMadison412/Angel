@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
+import { BloodGroupPicker, DateOfBirthField, GlassCard, PillButton, ScreenBackground, StepProgress } from "../../components";
 import { useDevice, useEmergencyProfile, useGuardians, useProfile } from "../../hooks";
+import { Dob, EMPTY_DOB, dobFromIso, dobToIso } from "../../lib/dob";
 import { localDigits, toE164 } from "../../lib/phone";
 import { colors, radius, spacing, type } from "../../theme";
 import { BloodGroup } from "../../types/database";
@@ -9,18 +10,7 @@ import { LocationPermissionScreen } from "./LocationPermissionScreen";
 import { NotificationPermissionScreen } from "./NotificationPermissionScreen";
 
 const TOTAL_STEPS = 6;
-const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const MAX_CONTACTS = 3;
-
-function isValidDate(day: number, month: number, year: number): boolean {
-  if (!day || !month || !year) return false;
-  if (month < 1 || month > 12) return false;
-  if (year < 1900 || year > new Date().getFullYear()) return false;
-  const d = new Date(year, month - 1, day);
-  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
-}
-
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /**
  * Runs once after signup, before the main app — collects what actually
@@ -83,34 +73,24 @@ function AboutYouStep({
   onContinue: () => void;
 }) {
   const [fullName, setFullName] = useState("");
-  const [day, setDay] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("");
+  const [dob, setDob] = useState<Dob>(EMPTY_DOB);
   const initialized = useRef(false);
 
   useEffect(() => {
     if (initialized.current || !emergencyProfile.data) return;
     initialized.current = true;
     setFullName(emergencyProfile.data.full_name ?? "");
-    if (emergencyProfile.data.date_of_birth) {
-      const [y, m, d] = emergencyProfile.data.date_of_birth.split("-");
-      setYear(y);
-      setMonth(m);
-      setDay(d);
-    }
+    setDob(dobFromIso(emergencyProfile.data.date_of_birth));
   }, [emergencyProfile.data]);
 
-  const dayNum = parseInt(day, 10);
-  const monthNum = parseInt(month, 10);
-  const yearNum = parseInt(year, 10);
-  const dateValid = isValidDate(dayNum, monthNum, yearNum);
-  const canContinue = fullName.trim().length > 0 && dateValid;
+  const dobIso = dobToIso(dob);
+  const canContinue = fullName.trim().length > 0 && dobIso !== null;
 
   const handleContinue = async () => {
     if (!canContinue) return;
     await emergencyProfile.save.mutateAsync({
       fullName: fullName.trim(),
-      dateOfBirth: `${yearNum}-${pad2(monthNum)}-${pad2(dayNum)}`,
+      dateOfBirth: dobIso,
     });
     onContinue();
   };
@@ -135,41 +115,7 @@ function AboutYouStep({
         />
       </GlassCard>
 
-      <GlassCard>
-        <Text style={[type.kicker, styles.dim]}>DATE OF BIRTH</Text>
-        <View style={styles.dobRow}>
-          <TextInput
-            value={day}
-            onChangeText={(v) => setDay(v.replace(/\D/g, "").slice(0, 2))}
-            placeholder="DD"
-            placeholderTextColor={colors.textDim}
-            keyboardType="number-pad"
-            maxLength={2}
-            style={[styles.input, styles.dobInput]}
-            underlineColorAndroid="transparent"
-          />
-          <TextInput
-            value={month}
-            onChangeText={(v) => setMonth(v.replace(/\D/g, "").slice(0, 2))}
-            placeholder="MM"
-            placeholderTextColor={colors.textDim}
-            keyboardType="number-pad"
-            maxLength={2}
-            style={[styles.input, styles.dobInput]}
-            underlineColorAndroid="transparent"
-          />
-          <TextInput
-            value={year}
-            onChangeText={(v) => setYear(v.replace(/\D/g, "").slice(0, 4))}
-            placeholder="YYYY"
-            placeholderTextColor={colors.textDim}
-            keyboardType="number-pad"
-            maxLength={4}
-            style={[styles.input, styles.dobInputYear]}
-            underlineColorAndroid="transparent"
-          />
-        </View>
-      </GlassCard>
+      <DateOfBirthField value={dob} onChange={setDob} />
 
       <PillButton
         title="CONTINUE"
@@ -224,20 +170,7 @@ function MedicalStep({
         </Text>
       </GlassCard>
 
-      <GlassCard>
-        <Text style={[type.kicker, styles.dim]}>BLOOD GROUP</Text>
-        <View style={styles.bloodGrid}>
-          {BLOOD_GROUPS.map((group) => (
-            <Pressable
-              key={group}
-              style={[styles.bloodOption, bloodGroup === group && styles.bloodOptionActive]}
-              onPress={() => setBloodGroup(group)}
-            >
-              <Text style={[styles.bloodText, bloodGroup === group && styles.bloodTextActive]}>{group}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </GlassCard>
+      <BloodGroupPicker value={bloodGroup} onChange={setBloodGroup} />
 
       <GlassCard>
         <Text style={[type.kicker, styles.dim]}>ALLERGIES / CONDITIONS (OPTIONAL)</Text>
@@ -469,22 +402,6 @@ const styles = StyleSheet.create({
   },
   codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
   phoneInput: { flex: 1, letterSpacing: 2 },
-  dobRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
-  dobInput: { flex: 1, marginTop: 0, textAlign: "center" },
-  dobInputYear: { flex: 1.6, marginTop: 0, textAlign: "center" },
-  bloodGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
-  bloodOption: {
-    width: "22%",
-    paddingVertical: spacing.md,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    backgroundColor: colors.glassFillRaised,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  bloodOptionActive: { borderColor: colors.accentBorder, backgroundColor: colors.accentMuted },
-  bloodText: { color: colors.textMuted, fontFamily: type.button.fontFamily, fontSize: 13 },
-  bloodTextActive: { color: colors.accent },
   contactList: { paddingVertical: spacing.sm },
   contactRow: {
     flexDirection: "row",

@@ -2,8 +2,9 @@ import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Avatar, GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
+import { Avatar, BloodGroupPicker, DateOfBirthField, GlassCard, PillButton, ScreenBackground, ScreenHeader } from "../../components";
 import { useDevice, useEmergencyProfile, useProfile } from "../../hooks";
+import { Dob, EMPTY_DOB, dobEntered, dobFromIso, dobToIso } from "../../lib/dob";
 import { localDigits, toE164 } from "../../lib/phone";
 import { ProfileStackNavigation } from "../../navigation/types";
 import { colors, radius, spacing, type } from "../../theme";
@@ -14,18 +15,6 @@ function initialsFor(name: string): string {
   if (parts.length === 0) return "?";
   return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
 }
-
-const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
-
-function isValidDate(day: number, month: number, year: number): boolean {
-  if (!day || !month || !year) return false;
-  if (month < 1 || month > 12) return false;
-  if (year < 1900 || year > new Date().getFullYear()) return false;
-  const d = new Date(year, month - 1, day);
-  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
-}
-
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /**
  * Reached from Settings → Edit Profile. Always in edit mode — unlike the
@@ -53,9 +42,7 @@ export function EditProfileScreen() {
   const bikeLoaded = useRef(false);
 
   const [fullName, setFullName] = useState("");
-  const [day, setDay] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("");
+  const [dob, setDob] = useState<Dob>(EMPTY_DOB);
   const [bloodGroup, setBloodGroup] = useState<BloodGroup | null>(null);
   const [conditions, setConditions] = useState("");
   const emergencyLoaded = useRef(false);
@@ -81,19 +68,11 @@ export function EditProfileScreen() {
     setFullName(data.full_name ?? "");
     setBloodGroup(data.blood_group ?? null);
     setConditions(data.medical_conditions ?? "");
-    if (data.date_of_birth) {
-      const [y, m, d] = data.date_of_birth.split("-");
-      setYear(y);
-      setMonth(m);
-      setDay(d);
-    }
+    setDob(dobFromIso(data.date_of_birth));
   }, [emergencyProfile.data]);
 
-  const dayNum = parseInt(day, 10);
-  const monthNum = parseInt(month, 10);
-  const yearNum = parseInt(year, 10);
-  const dobEntered = day.length > 0 || month.length > 0 || year.length > 0;
-  const dobValid = !dobEntered || isValidDate(dayNum, monthNum, yearNum);
+  const dobIso = dobToIso(dob);
+  const dobValid = !dobEntered(dob) || dobIso !== null;
 
   const nameError = showErrors && name.trim().length === 0 ? "Name can't be blank." : null;
   const phoneError = showErrors && phone.length !== 10 ? "Enter a valid 10-digit phone number." : null;
@@ -135,7 +114,7 @@ export function EditProfileScreen() {
         device.saveBikeInfo.mutateAsync({ bikeMake: bikeMake.trim() || null, bikeModel: bikeModel.trim() || null }),
         emergencyProfile.save.mutateAsync({
           fullName: fullName.trim() || null,
-          dateOfBirth: dobEntered && isValidDate(dayNum, monthNum, yearNum) ? `${yearNum}-${pad2(monthNum)}-${pad2(dayNum)}` : null,
+          dateOfBirth: dobIso,
           bloodGroup,
           medicalConditions: conditions.trim() || null,
         }),
@@ -243,56 +222,9 @@ export function EditProfileScreen() {
           </Text>
         </GlassCard>
 
-        <GlassCard>
-          <Text style={[type.kicker, styles.dim]}>DATE OF BIRTH</Text>
-          <View style={styles.dobRow}>
-            <TextInput
-              value={day}
-              onChangeText={(v) => setDay(v.replace(/\D/g, "").slice(0, 2))}
-              placeholder="DD"
-              placeholderTextColor={colors.textDim}
-              keyboardType="number-pad"
-              maxLength={2}
-              style={[styles.input, styles.dobInput]}
-              underlineColorAndroid="transparent"
-            />
-            <TextInput
-              value={month}
-              onChangeText={(v) => setMonth(v.replace(/\D/g, "").slice(0, 2))}
-              placeholder="MM"
-              placeholderTextColor={colors.textDim}
-              keyboardType="number-pad"
-              maxLength={2}
-              style={[styles.input, styles.dobInput]}
-              underlineColorAndroid="transparent"
-            />
-            <TextInput
-              value={year}
-              onChangeText={(v) => setYear(v.replace(/\D/g, "").slice(0, 4))}
-              placeholder="YYYY"
-              placeholderTextColor={colors.textDim}
-              keyboardType="number-pad"
-              maxLength={4}
-              style={[styles.input, styles.dobInputYear]}
-              underlineColorAndroid="transparent"
-            />
-          </View>
-        </GlassCard>
+        <DateOfBirthField value={dob} onChange={setDob} />
 
-        <GlassCard>
-          <Text style={[type.kicker, styles.dim]}>BLOOD GROUP</Text>
-          <View style={styles.bloodGrid}>
-            {BLOOD_GROUPS.map((group) => (
-              <Pressable
-                key={group}
-                style={[styles.bloodOption, bloodGroup === group && styles.bloodOptionActive]}
-                onPress={() => setBloodGroup(bloodGroup === group ? null : group)}
-              >
-                <Text style={[styles.bloodText, bloodGroup === group && styles.bloodTextActive]}>{group}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </GlassCard>
+        <BloodGroupPicker value={bloodGroup} onChange={setBloodGroup} />
 
         <GlassCard>
           <Text style={[type.kicker, styles.dim]}>ALLERGIES / CONDITIONS (OPTIONAL)</Text>
@@ -361,21 +293,5 @@ const styles = StyleSheet.create({
   },
   codeText: { ...type.body, color: colors.text, fontFamily: type.button.fontFamily },
   phoneInput: { flex: 1, letterSpacing: 2 },
-  dobRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
-  dobInput: { flex: 1, marginTop: 0, textAlign: "center" },
-  dobInputYear: { flex: 1.6, marginTop: 0, textAlign: "center" },
-  bloodGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
-  bloodOption: {
-    width: "22%",
-    paddingVertical: spacing.md,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    backgroundColor: colors.glassFillRaised,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  bloodOptionActive: { borderColor: colors.accentBorder, backgroundColor: colors.accentMuted },
-  bloodText: { color: colors.textMuted, fontFamily: type.button.fontFamily, fontSize: 13 },
-  bloodTextActive: { color: colors.accent },
   error: { color: colors.accent, textAlign: "center", ...type.bodySmall },
 });

@@ -1,7 +1,8 @@
+import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import React from "react";
 import { ScrollView, StyleSheet, View, ViewStyle, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../theme";
+import { colors, spacing } from "../theme";
 import { DotGridBackground } from "./DotGridBackground";
 
 interface Props {
@@ -35,19 +36,30 @@ export function ScreenBackground({
   const constrain = width >= LARGE_SCREEN_BREAKPOINT;
   const constrainStyle = constrain ? { width: "100%" as const, maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center" as const } : null;
 
+  // The tab bar floats over the screen (see AppTabs), so content has to
+  // reserve its height itself. Read through the context rather than
+  // useBottomTabBarHeight() because that hook throws on the screens outside
+  // the tab navigator — auth, onboarding, the crash flow — which render this
+  // same component and legitimately have no tab bar. The height already
+  // includes the bottom safe-area inset, so the "bottom" edge is dropped
+  // below to avoid insetting twice.
+  const tabBarHeight = React.useContext(BottomTabBarHeightContext) ?? 0;
+  const safeEdges = tabBarHeight > 0 ? edges.filter((edge) => edge !== "bottom") : edges;
+  const bottomInset = { paddingBottom: tabBarHeight + spacing.xxxl };
+
   return (
     <View style={[styles.flex, { backgroundColor }]}>
       <DotGridBackground />
-      <SafeAreaView style={styles.flex} edges={edges}>
+      <SafeAreaView style={styles.flex} edges={safeEdges}>
         {scroll ? (
           <ScrollView
-            contentContainerStyle={[constrain && styles.centeredScrollContent, contentStyle, constrainStyle]}
+            contentContainerStyle={[constrain && styles.centeredScrollContent, contentStyle, constrainStyle, bottomInset]}
             showsVerticalScrollIndicator={false}
           >
             {children}
           </ScrollView>
         ) : (
-          <View style={[styles.flex, styles.nonScrollWrap, contentStyle, constrainStyle]}>{children}</View>
+          <View style={[styles.flex, styles.nonScrollWrap, contentStyle, constrainStyle, bottomInset]}>{children}</View>
         )}
       </SafeAreaView>
     </View>

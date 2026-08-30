@@ -2,7 +2,6 @@ export * from "./useAuth";
 export * from "./useProfile";
 export * from "./useDevice";
 export * from "./useGuardians";
-export * from "./useIncident";
 export * from "./useSubscription";
 export * from "./useLocation";
 export * from "./useLocationPermission";

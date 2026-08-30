@@ -15,19 +15,21 @@ function initialsFor(name: string): string {
 }
 
 // Line-art gear matching TabBarIcon's hand-drawn style — used nowhere else,
-// so it lives here rather than as a shared component.
+// so it lives here rather than as a shared component. The teeth are part of
+// the body outline rather than detached radial ticks: spokes floating off a
+// circle read as a brightness/dark-mode control, not a settings gear.
 function GearIcon({ color, size = 22 }: { color: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={1.75} fill="none" />
       <Path
         stroke={color}
-        strokeWidth={1.75}
+        strokeWidth={1.6}
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
-        d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M17.66 6.34l-1.42 1.42M7.76 16.24l-1.42 1.42M17.66 17.66l-1.42-1.42M7.76 7.76 6.34 6.34"
+        d="M10.02 5.08L10.44 2.12L13.56 2.12L13.98 5.08A7.2 7.2 0 0 1 15.49 5.7L17.88 3.91L20.09 6.12L18.3 8.51A7.2 7.2 0 0 1 18.92 10.02L21.88 10.44L21.88 13.56L18.92 13.98A7.2 7.2 0 0 1 18.3 15.49L20.09 17.88L17.88 20.09L15.49 18.3A7.2 7.2 0 0 1 13.98 18.92L13.56 21.88L10.44 21.88L10.02 18.92A7.2 7.2 0 0 1 8.51 18.3L6.12 20.09L3.91 17.88L5.7 15.49A7.2 7.2 0 0 1 5.08 13.98L2.12 13.56L2.12 10.44L5.08 10.02A7.2 7.2 0 0 1 5.7 8.51L3.91 6.12L6.12 3.91L8.51 5.7A7.2 7.2 0 0 1 10.02 5.08Z"
       />
+      <Circle cx={12} cy={12} r={3.1} stroke={color} strokeWidth={1.6} fill="none" />
     </Svg>
   );
 }
@@ -82,6 +84,22 @@ export function ProfileScreen() {
         <Text style={styles.value}>{device.data?.bike_model || "—"}</Text>
       </GlassCard>
 
+      <Text style={[type.kicker, styles.sectionLabel]}>INSURANCE</Text>
+      <Pressable onPress={() => navigation.navigate("Insurance")}>
+        <GlassCard style={styles.insuranceCard}>
+          <View style={styles.insuranceTextWrap}>
+            <Text style={styles.insuranceProvider} numberOfLines={1}>
+              {emergencyProfile.data?.insurance_provider || "Add your insurance"}
+            </Text>
+            <Text style={[type.bodySmall, styles.insurancePolicy]} numberOfLines={1}>
+              {emergencyProfile.data?.insurance_policy_name || "Insurer, policy, and hospital preference"}
+            </Text>
+          </View>
+          {emergencyProfile.data?.insurance_covered && <View style={styles.coveredDot} />}
+          <Text style={styles.chevron}>›</Text>
+        </GlassCard>
+      </Pressable>
+
       <Text style={[type.kicker, styles.sectionLabel]}>EMERGENCY INFO</Text>
 
       <GlassCard accentBorder>
@@ -126,4 +144,10 @@ const styles = StyleSheet.create({
   consentCopy: { marginTop: spacing.md },
   value: { ...type.body, color: colors.text, marginTop: spacing.sm },
   fieldSpacing: { marginTop: spacing.md },
+  insuranceCard: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  insuranceTextWrap: { flex: 1 },
+  insuranceProvider: { ...type.body, color: colors.text },
+  insurancePolicy: { color: colors.textMuted, marginTop: spacing.xs },
+  coveredDot: { width: 9, height: 9, borderRadius: 999, backgroundColor: colors.success },
+  chevron: { color: colors.textDim, fontSize: 20 },
 });

@@ -85,17 +85,6 @@ export async function presentCrashConfirmedAlert(): Promise<void> {
   await scheduleCrashConfirmedSystemNotification();
 }
 
-/**
- * DiagnosticScreen-only (__DEV__): always schedules the real system
- * notification, even in the foreground, so its title/body/icon/color/channel
- * behavior can actually be inspected on-device — presentCrashConfirmedAlert()
- * would otherwise route to the in-app banner whenever the app testing it is,
- * itself, in the foreground.
- */
-export async function presentCrashConfirmedAlertForPreview(): Promise<void> {
-  await scheduleCrashConfirmedSystemNotification();
-}
-
 export interface SpeedAlertNotificationData {
   kind: "speed_alert";
 }
@@ -132,16 +121,6 @@ export async function presentSpeedAlert(): Promise<void> {
     publishInAppAlert("speed", SPEED_ALERT_TITLE, SPEED_ALERT_BODY);
     return;
   }
-  await scheduleSpeedAlertSystemNotification();
-}
-
-/**
- * DiagnosticScreen-only (__DEV__): always schedules the real system
- * notification, bypassing both the foreground → in-app-banner redirect
- * above and speedMonitor's 3s-sustained/5min-cooldown gating, so it fires
- * immediately regardless of app state or recent alert history.
- */
-export async function presentSpeedAlertForPreview(): Promise<void> {
   await scheduleSpeedAlertSystemNotification();
 }
 

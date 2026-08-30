@@ -87,24 +87,6 @@ export function DeviceScreen() {
           Every mount sits at a different angle. Re-calibrate any time the device is remounted.
         </Text>
       </GlassCard>
-
-      {/* TEMP DEBUG — remove once the calibration_complete investigation is resolved.
-          Gated behind __DEV__ so this never ships reachable in a production build
-          (Play Store first-submission prep) while staying available for dev builds. */}
-      {__DEV__ && (
-        <GlassCard style={styles.debugCard}>
-          <Text style={[type.kicker, styles.dim]}>TEMP · DEBUG</Text>
-          <Text style={[type.bodySmall, styles.hint]}>
-            Raw values received from the device over BLE, live — to confirm whether data is actually reaching the app.
-          </Text>
-          <PillButton
-            title="VIEW RAW BLE DATA"
-            variant="outline"
-            onPress={() => navigation.navigate("Diagnostic")}
-            style={styles.pairButton}
-          />
-        </GlassCard>
-      )}
     </ScreenBackground>
   );
 }
@@ -124,14 +106,18 @@ const styles = StyleSheet.create({
   dim: { color: colors.textDim },
   faultTitle: { color: colors.danger },
   faultCopy: { color: colors.textMuted, marginTop: spacing.sm },
-  debugCard: { borderStyle: "dashed" as const, borderColor: colors.glassBorder },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    // Wrap rather than squeeze: past a certain label length or font scale
+    // there isn't room for both, and shrinking the label alone breaks it
+    // mid-word. The pill drops to its own line instead.
+    flexWrap: "wrap",
+    gap: spacing.md,
     marginTop: spacing.md,
   },
-  statusText: { color: colors.text },
+  statusText: { color: colors.text, flexShrink: 1 },
   pairedName: { marginTop: spacing.xs },
   pairButton: { marginTop: spacing.lg },
   offsetRow: { flexDirection: "row", gap: spacing.xl, marginTop: spacing.md },

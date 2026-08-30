@@ -29,7 +29,6 @@ export function CrashAlertScreen() {
   // TODO: RE-ENABLE FOR V2 — nearest-responder matching removed for the v1
   // Play Store release (guardians-only via WhatsApp).
   // const { data: responders } = useResponders(responderTypesForSeverity(severity));
-  // const assignResponder = useAssignResponder();
   const insets = useSafeAreaInsets();
 
   const [secondsLeft, setSecondsLeft] = useState(() => remainingCountdownSeconds(receivedAt, totalSeconds));

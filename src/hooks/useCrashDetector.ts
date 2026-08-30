@@ -188,7 +188,7 @@ export function useCrashDetector(options?: { mock?: boolean }) {
  * useCrashDetector() re-rendered at that rate too, even ones that never
  * read telemetry (e.g. DeviceSetupScreen, DeviceScreen), which is what
  * produced the Device tab's constant flicker. Only components that
- * actually display live telemetry (HomeScreen, DiagnosticScreen) should
+ * actually display live telemetry (HomeScreen) should
  * pay for these re-renders — call this hook there, and nowhere else.
  */
 export function useCrashDetectorTelemetry(options?: { mock?: boolean }): TelemetryReading | null {
