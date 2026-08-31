@@ -1,8 +1,9 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
-import { PillButton, RouteMap, ScreenBackground, ScreenHeader } from "../../components";
+import { PartnerSearchMap, PillButton, RouteMap, ScreenBackground, ScreenHeader } from "../../components";
+import { useCrashTicket } from "../../hooks";
+import { haversineKm, etaMinutes } from "../../lib/geo";
 import { supabase } from "../../lib/supabase";
 import { colors, spacing, type } from "../../theme";
 import { RootStackNavigation, RootStackParamList } from "../../navigation/types";
@@ -13,82 +14,30 @@ import { RootStackNavigation, RootStackParamList } from "../../navigation/types"
 const FALLBACK_LAT = 12.9716;
 const FALLBACK_LNG = 77.5946;
 
-type TicketStatus = "open" | "accepted" | "closed" | "escalated";
-
-// Local to this screen — deliberately not added to types/database.ts (see
-// the prompt that added this file: no other files should change).
-interface CrashTicket {
-  id: string;
-  rider_id: string;
-  severity: number;
-  trigger: "impact" | "tilt" | null;
-  impact_g: number | null;
-  gyro_dps: number | null;
-  tilt_deg: number | null;
-  rider_lat: number | null;
-  rider_lng: number | null;
-  status: TicketStatus;
-  accepted_by: string | null;
-  accepted_at: string | null;
-  closed_at: string | null;
-  created_at: string;
-}
-
-// One-time fetch only — the realtime subscription that used to live here
-// (reflecting a partner accepting/closing the ticket from the separate
-// Angel Partners app) is gone for v1; see the TODO below. The crash_tickets
-// row itself is still written (CrashAlertScreen) and still read by that
-// separate Partners platform — this screen just no longer shows any of
-// that status.
-function useTicket(ticketId: string) {
-  return useQuery({
-    queryKey: ["crash-ticket", ticketId],
-    queryFn: async (): Promise<CrashTicket | null> => {
-      const { data, error } = await supabase.from("crash_tickets").select("*").eq("id", ticketId).maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-}
-
-// TODO: RE-ENABLE FOR V2 — this realtime subscription reflected a partner
-// (from the separate Angel Partners app) accepting or closing the ticket.
-// Removed for the v1 Play Store release (guardians-only via WhatsApp, no
-// live partner-matching UI). Was:
-//
-// useEffect(() => {
-//   const channel = supabase
-//     .channel(`crash-ticket-${ticketId}`)
-//     .on(
-//       "postgres_changes",
-//       { event: "UPDATE", schema: "public", table: "crash_tickets", filter: `id=eq.${ticketId}` },
-//       (payload) => {
-//         queryClient.setQueryData(["crash-ticket", ticketId], payload.new as CrashTicket);
-//       }
-//     )
-//     .subscribe();
-//   return () => { supabase.removeChannel(channel); };
-// }, [ticketId, queryClient]);
-
 /**
- * Shown to the rider once a severity 2-5 crash ticket exists — a simple
- * "your guardians have been notified" confirmation with the crash location
- * and a way to call emergency services directly. Reached from
- * CrashAlertScreen.dispatch() once the crash_tickets insert succeeds.
- *
- * v1 Play Store release: no partner-matching/dispatch UI — see the v2 TODOs
- * in this file and in CrashAlertScreen.dispatch() for what used to be here.
+ * Shown to the rider once a crash ticket exists — any severity, or a manual
+ * "I NEED HELP NOW". While it's open this is a "searching for a nearby
+ * responder" state; the moment a partner accepts it from the separate Angel
+ * Partners app, the crash_tickets realtime subscription (useCrashTicket)
+ * flips this to a "partner responding" card with their live pin, ETA and a
+ * call button. Also reacts to the partner closing or escalating the ticket.
+ * Reached from CrashAlertScreen.dispatch() / the guardian-alert flows once
+ * the crash_tickets insert succeeds.
  */
 export function ActiveTicketScreen() {
   const navigation = useNavigation<RootStackNavigation>();
   const route = useRoute<RouteProp<RootStackParamList, "ActiveTicket">>();
   const { ticketId } = route.params;
 
-  const { data: ticket } = useTicket(ticketId);
+  const { ticket, partner } = useCrashTicket(ticketId);
   const [closing, setClosing] = useState(false);
 
   const handleCallEmergency = () => {
     Linking.openURL("tel:112");
+  };
+
+  const handleCallPartner = () => {
+    if (partner?.phone) Linking.openURL(`tel:${partner.phone}`);
   };
 
   const handleClose = async () => {
@@ -116,19 +65,72 @@ export function ActiveTicketScreen() {
 
   const riderLat = ticket.rider_lat ?? FALLBACK_LAT;
   const riderLng = ticket.rider_lng ?? FALLBACK_LNG;
+  const responding = ticket.status === "accepted" && Boolean(partner);
+  const escalated = ticket.status === "escalated";
+  // Closed from another session/device — a rider who closed it here has
+  // already navigated away (handleClose → popToTop).
+  const closedElsewhere = ticket.status === "closed";
+
+  const partnerHasFix = partner?.current_lat != null && partner?.current_lng != null;
+
+  // Straight-line ETA — a rough "how far out" for the rider, not a routed
+  // estimate. Only shown when the partner has pushed a location (they do so
+  // on an interval while responding).
+  let etaMin: number | null = null;
+  if (responding && partnerHasFix) {
+    const km = haversineKm({ lat: riderLat, lng: riderLng }, { lat: partner!.current_lat!, lng: partner!.current_lng! });
+    etaMin = etaMinutes(km);
+  }
+
+  const heading = escalated
+    ? "Escalated to emergency services"
+    : responding
+      ? "A partner is on the way"
+      : "Help is on the way";
 
   return (
     <ScreenBackground scroll contentStyle={styles.content}>
       <ScreenHeader onBack={() => navigation.goBack()} />
 
       <View style={styles.headerBlock}>
-        <Text style={[type.title, styles.heading]}>Help is on the way</Text>
-        <Text style={[type.bodySmall, styles.subheading]}>Your guardians have been notified.</Text>
+        <Text style={[type.title, styles.heading]}>{heading}</Text>
+        <Text style={[type.bodySmall, styles.subheading]}>
+          {escalated
+            ? "A responder flagged this for emergency services. Your guardians were also notified."
+            : closedElsewhere
+              ? "This alert has been closed."
+              : "Your guardians have been notified."}
+        </Text>
       </View>
 
-      <View style={styles.mapWrap}>
-        <RouteMap riderLat={riderLat} riderLng={riderLng} />
-      </View>
+      {responding && partner ? (
+        <View style={styles.section}>
+          <View style={styles.partnerCard}>
+            <Text style={[type.kicker, styles.partnerLabel]}>PARTNER RESPONDING</Text>
+            <Text style={[type.body, styles.partnerName]}>{partner.full_name}</Text>
+            {etaMin != null && (
+              <Text style={[type.bodySmall, styles.partnerEta]}>~{etaMin} min away</Text>
+            )}
+            {partner.phone && (
+              <PillButton title="CALL PARTNER" variant="outline" onPress={handleCallPartner} />
+            )}
+          </View>
+          <RouteMap
+            riderLat={riderLat}
+            riderLng={riderLng}
+            partnerLat={partnerHasFix ? partner.current_lat : null}
+            partnerLng={partnerHasFix ? partner.current_lng : null}
+          />
+        </View>
+      ) : (
+        <View style={styles.mapWrap}>
+          {closedElsewhere || escalated ? (
+            <RouteMap riderLat={riderLat} riderLng={riderLng} />
+          ) : (
+            <PartnerSearchMap riderLat={riderLat} riderLng={riderLng} />
+          )}
+        </View>
+      )}
 
       <View style={styles.actions}>
         <PillButton title="CALL 112 · EMERGENCY SERVICES" variant="outline" onPress={handleCallEmergency} />
@@ -151,6 +153,17 @@ const styles = StyleSheet.create({
   headerBlock: { paddingHorizontal: spacing.xl, gap: spacing.sm, marginBottom: spacing.lg },
   heading: { color: colors.text },
   subheading: { color: colors.textMuted },
+  section: { paddingHorizontal: spacing.xl, gap: spacing.lg },
+  partnerCard: {
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    borderRadius: 16,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  partnerLabel: { color: colors.success },
+  partnerName: { color: colors.text },
+  partnerEta: { color: colors.textMuted },
   mapWrap: { paddingHorizontal: spacing.xl },
   actions: { paddingHorizontal: spacing.xl, marginTop: spacing.xl, gap: spacing.md },
 });

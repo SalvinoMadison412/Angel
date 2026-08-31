@@ -4,7 +4,8 @@ import { supabase } from "../../lib/supabase";
 import { CrashEvent } from "../bluetooth";
 import { MedicalSnapshot, notificationService, presentCrashConfirmedAlert } from "../notifications";
 import { getLastKnownCoords } from "../location/locationTracking";
-import { Guardian, Incident } from "../../types/database";
+import { CrashTicketSource, Guardian, Incident } from "../../types/database";
+import { crashTicketRow } from "../../lib/crashTicket";
 
 export const DEFAULT_COUNTDOWN_SECONDS = 10;
 // Severity-1 events go through the lighter guardians-only countdown
@@ -91,6 +92,36 @@ async function captureCurrentLocation(): Promise<{ lat: number | null; lng: numb
   } catch (err) {
     console.warn("[emergency] failed to capture location", err);
     return { lat: null, lng: null };
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// crash_tickets row — the "signal" the Angel Partners app consumes. One per
+// rider-initiated emergency: a detected crash of any severity ('crash') or a
+// manual "I NEED HELP NOW" ('manual', no sensor data). Created while the
+// alert is still fresh and status='open' so nearby partners can accept it.
+// Best-effort: returns null rather than throwing — a guardian alert that
+// already went out must never be undone by this failing. Shared by
+// CrashAlertScreen (created on mount, during the countdown) and
+// sendGuardianAlert below.
+// ───────────────────────────────────────────────────────────────────────
+export async function createCrashTicket(input: {
+  userId: string;
+  source: CrashTicketSource;
+  event: CrashEvent;
+}): Promise<string | null> {
+  const { lat, lng } = await captureCurrentLocation();
+  try {
+    const { data, error } = await supabase
+      .from("crash_tickets")
+      .insert(crashTicketRow({ ...input, lat, lng }))
+      .select("id")
+      .single();
+    if (error) throw error;
+    return data.id as string;
+  } catch (err) {
+    console.warn("[emergency] failed to create crash ticket", err);
+    return null;
   }
 }
 
@@ -258,14 +289,22 @@ export async function cancelCrashEvent(event: CrashEvent): Promise<void> {
 export interface SendGuardianAlertInput {
   event: CrashEvent;
   userId: string;
+  /** 'manual' = the rider hit "I NEED HELP NOW"; 'crash' = a severity-1 sensor event. Defaults to 'crash'. */
+  source?: CrashTicketSource;
 }
 
 export interface SendGuardianAlertResult {
   /** How many guardians the edge function actually got an SMS out to. */
   sent: number;
+  /** The open crash_tickets row for the Angel Partners app, or null if that write failed. */
+  ticketId: string | null;
 }
 
-export async function sendGuardianAlert({ event, userId }: SendGuardianAlertInput): Promise<SendGuardianAlertResult> {
+export async function sendGuardianAlert({
+  event,
+  userId,
+  source = "crash",
+}: SendGuardianAlertInput): Promise<SendGuardianAlertResult> {
   await logCrashEventLocally(event, "confirmed");
 
   const { lat, lng } = await captureCurrentLocation();
@@ -279,9 +318,14 @@ export async function sendGuardianAlert({ event, userId }: SendGuardianAlertInpu
     reason: "missed_checkin",
   });
 
+  // ponytail: a retry after a partial failure (guardians sent, this failed)
+  // creates a second ticket — same pre-existing shape as the double
+  // guardian-send on retry. Upgrade path: dedupe on (rider_id, open, <2 min).
+  const ticketId = await createCrashTicket({ userId, source, event });
+
   presentCrashConfirmedAlert().catch((err) =>
     console.warn("[notifications] failed to present crash-confirmed alert", err)
   );
 
-  return result;
+  return { ...result, ticketId };
 }

@@ -125,3 +125,17 @@ Full breakdown already written in [PRIVACY_POLICY.md](PRIVACY_POLICY.md) §"Thir
 6. Decide reviewer access plan (real OTP number vs. demo video)
 7. Confirm target SDK 35 against the actual built AAB, not just plugin defaults
 8. Fill in Play Console: category, content rating questionnaire, target audience
+9. **Rotate `DISPATCH_WEBHOOK_SECRET` — security, must happen before the build.**
+   The current value was exposed in a chat transcript. It is the only thing
+   authenticating the `crash_tickets` INSERT trigger to the `dispatch-partners`
+   edge function (which runs with `verify_jwt = false`), so anyone holding it can
+   fire arbitrary partner push notifications. Rotate **both** sides to the *same*
+   new value, or dispatch silently stops working:
+   - the Vault secret `dispatch_webhook_secret` (read by the trigger function
+     `public.dispatch_partners_on_crash_ticket`)
+   - the edge function's `DISPATCH_WEBHOOK_SECRET`
+     (`supabase secrets set DISPATCH_WEBHOOK_SECRET=<new value>`)
+
+   Verify after rotating: create a test crash ticket and confirm a partner push
+   goes out (the function 401s and sends nothing if the two disagree — it fails
+   safe, but silently).

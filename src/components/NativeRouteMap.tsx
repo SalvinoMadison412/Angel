@@ -6,6 +6,9 @@ import { colors, radius } from "../theme";
 interface Props {
   riderLat: number;
   riderLng: number;
+  /** The responding partner's last known position, once one has accepted the ticket. */
+  partnerLat?: number | null;
+  partnerLng?: number | null;
   width?: number;
   height?: number;
 }
@@ -30,22 +33,41 @@ const DARK_MAP_STYLE = [
  * Real map renderer — only mounted when EXPO_PUBLIC_GOOGLE_MAPS_KEY is set
  * and the app is running as a dev-client/standalone build (react-native-maps
  * needs native code react-native-maps isn't available in plain Expo Go).
- * Single pin at the given location — see RouteMap.tsx.
+ * Crash-location pin, plus the responding partner's pin once one accepts —
+ * see RouteMap.tsx.
  */
-export function NativeRouteMap({ riderLat, riderLng, width, height }: Props) {
+export function NativeRouteMap({ riderLat, riderLng, partnerLat, partnerLng, width, height }: Props) {
+  const hasPartner = partnerLat != null && partnerLng != null;
+
+  // With a partner on the map, frame both pins at mount; otherwise sit tight
+  // on the rider. Uncontrolled (initialRegion) on purpose — the partner
+  // Marker still moves as its position updates, but the viewport doesn't
+  // yank itself around every poll or fight the rider panning. midpoint +
+  // padded span is enough: same-city dispatch, so great-circle skew is nil.
+  const initialRegion = hasPartner
+    ? {
+        latitude: (riderLat + partnerLat!) / 2,
+        longitude: (riderLng + partnerLng!) / 2,
+        latitudeDelta: Math.max(Math.abs(riderLat - partnerLat!) * 2.5, 0.01),
+        longitudeDelta: Math.max(Math.abs(riderLng - partnerLng!) * 2.5, 0.01),
+      }
+    : { latitude: riderLat, longitude: riderLng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+
   return (
     <MapView
       style={[styles.map, width && height ? { width, height } : undefined]}
       provider={PROVIDER_GOOGLE}
       customMapStyle={DARK_MAP_STYLE}
-      initialRegion={{
-        latitude: riderLat,
-        longitude: riderLng,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      }}
+      initialRegion={initialRegion}
     >
       <Marker coordinate={{ latitude: riderLat, longitude: riderLng }} title="Crash location" pinColor={colors.accent} />
+      {hasPartner && (
+        <Marker
+          coordinate={{ latitude: partnerLat!, longitude: partnerLng! }}
+          title="Partner responding"
+          pinColor={colors.success}
+        />
+      )}
     </MapView>
   );
 }

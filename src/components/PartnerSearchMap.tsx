@@ -3,15 +3,15 @@ import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from "r
 import { colors, radius, spacing, type } from "../theme";
 import { RouteMap } from "./RouteMap";
 
-// Rider location with an outward radar sweep over it, for the stretch after
-// guardians are alerted while Angel looks for the nearest partner rider.
+// Rider location with an outward radar sweep over it — the "searching for a
+// nearby partner" state.
 //
-// ponytail: the search is presentational — there is no matching backend yet,
-// so this pulses indefinitely and never resolves. Upgrade path: the
-// crash_tickets row already carries status/accepted_by/accepted_at, so
-// subscribing to its UPDATEs (see the commented v2 block in
-// ActiveTicketScreen) is what flips this to a found/accepted state. Keep the
-// rings; swap the copy and stop the loop when a partner accepts.
+// The radar itself is presentational: it pulses for as long as this is
+// mounted. The real accept comes through crash_tickets realtime — when a
+// partner accepts, ActiveTicketScreen swaps this whole component out for the
+// "partner responding" card + live map (see useCrashTicket). This component
+// is only shown while status is still 'open'. EmergencyAlertSentScreen also
+// renders it as a plain fallback when no ticket could be created.
 
 const RING_COUNT = 3;
 const RING_MAX = 220;
