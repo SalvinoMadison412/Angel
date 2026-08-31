@@ -20,3 +20,4 @@ export * from "./AlertBanner";
 export * from "./PermissionBanner";
 export * from "./ConfirmModal";
 export * from "./MedicalFields";
+export * from "./PartnerSearchMap";
