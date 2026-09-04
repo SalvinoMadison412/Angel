@@ -20,7 +20,7 @@ Consolidated technical reference for filling out the Play Console listing, data 
 
 ## 2. What the app does (for the listing / reviewer notes)
 
-Angel pairs over Bluetooth Low Energy with a vehicle-mounted crash-sensor device (custom ESP32 + accelerometer/gyroscope, see [firmware/](firmware/)). The sensor detects a possible crash and pushes a BLE notification to the phone. The app then runs a cancel-countdown; if not cancelled, it captures the rider's location and automatically alerts the rider's stored emergency contacts ("guardians") by WhatsApp message and automated phone call (via Twilio), and — depending on crash severity — opens a dispatch ticket that a trained responder in the companion **Angel Partners** app can accept and navigate to.
+Angel pairs over Bluetooth Low Energy with a vehicle-mounted crash sensor (custom ESP32 + accelerometer/gyroscope, see [firmware/](firmware/)). The sensor detects a possible crash and pushes a BLE notification to the phone. The app then runs a cancel-countdown; if not cancelled, it captures the rider's location and automatically alerts the rider's stored emergency contacts ("guardians") by WhatsApp message and automated phone call (via Twilio), and — depending on crash severity — opens a dispatch ticket that a trained responder in the companion **Angel Partners** app can accept and navigate to.
 
 This app is one half of a two-app platform sharing one Supabase backend; Angel Partners (`com.angel.partners`) is a separate submission, not covered by this document.
 
