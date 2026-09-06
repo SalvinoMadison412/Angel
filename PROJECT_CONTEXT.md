@@ -6,7 +6,7 @@ Written at the end of a QA-and-fix session covering both apps. Intended to let a
 
 Two-wheeler crash-detection platform, two separate Expo/React Native/TypeScript apps sharing one Supabase backend:
 
-- **Angel** (this repo, `/Users/salvinomadison/Desktop/Angel`) — rider-facing app, package `com.angel.crashdetection`. Pairs over BLE with a wearable crash sensor, runs a cancel-countdown when a crash is detected, and — depending on severity — texts the rider's guardians and/or creates a dispatch ticket for a real-world responder.
+- **Angel** (this repo, `/Users/salvinomadison/Desktop/Angel`) — rider-facing app, package `com.angel.crashdetection`. Pairs over BLE with a vehicle-mounted crash sensor, runs a cancel-countdown when a crash is detected, and — depending on severity — texts the rider's guardians and/or creates a dispatch ticket for a real-world responder.
 - **Angel Partners** (sibling repo, `/Users/salvinomadison/Desktop/angel-partners`, package `com.angel.partners`) — responder-facing app. Trained "partners" go on/off duty, get a full-screen alert when a nearby severity 2–5 ticket opens, accept it, and navigate to the rider.
 - Riders and partners are **separate, unrelated auth accounts** (Angel: phone OTP or Google OAuth; Angel Partners: email/password) against the same `auth.users` table in one Supabase project. There is no shared login.
 
