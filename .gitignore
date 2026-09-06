@@ -49,3 +49,6 @@ yarn-error.*
 
 # Supabase CLI local state
 supabase/.temp/
+
+# stray Obsidian vault created in-repo; real vault is ~/Desktop/AngelBrain
+/Angel/
