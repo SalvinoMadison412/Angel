@@ -20,7 +20,7 @@ Consolidated technical reference for filling out the Play Console listing, data 
 
 ## 2. What the app does (for the listing / reviewer notes)
 
-Angel pairs over Bluetooth Low Energy with a wearable crash-sensor device (custom ESP32 + accelerometer/gyroscope, see [firmware/](firmware/)). The sensor detects a possible crash and pushes a BLE notification to the phone. The app then runs a cancel-countdown; if not cancelled, it captures the rider's location and automatically alerts the rider's stored emergency contacts ("guardians") by WhatsApp message and automated phone call (via Twilio), and — depending on crash severity — opens a dispatch ticket that a trained responder in the companion **Angel Partners** app can accept and navigate to.
+Angel pairs over Bluetooth Low Energy with a crash-sensor device that's wired into the motorcycle's battery (custom ESP32 + accelerometer/gyroscope, see [firmware/](firmware/)). The sensor detects a possible crash and pushes a BLE notification to the phone. The app then runs a cancel-countdown; if not cancelled, it captures the rider's location and automatically alerts the rider's stored emergency contacts ("guardians") by WhatsApp message and automated phone call (via Twilio), and — depending on crash severity — opens a dispatch ticket that a trained responder in the companion **Angel Partners** app can accept and navigate to.
 
 This app is one half of a two-app platform sharing one Supabase backend; Angel Partners (`com.angel.partners`) is a separate submission, not covered by this document.
 
@@ -47,7 +47,7 @@ Pulled from [android/app/src/main/AndroidManifest.xml](android/app/src/main/Andr
 | `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | Attach rider location to a crash alert |
 | `ACCESS_BACKGROUND_LOCATION` | Keep an accurate location fix if a crash happens while the phone is locked — see §6, this is **not yet reflected in the privacy policy** |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` | Support the background location watch above |
-| `BLUETOOTH`, `BLUETOOTH_ADMIN`, `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` | Pair with and read data from the wearable crash sensor |
+| `BLUETOOTH`, `BLUETOOTH_ADMIN`, `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` | Pair with and read data from the vehicle-mounted crash sensor |
 | `POST_NOTIFICATIONS` | Local alert to the rider if a crash is detected while backgrounded |
 | `VIBRATE` | Haptic feedback (crash alert / countdown) |
 | `INTERNET` | Supabase/Twilio network calls |
