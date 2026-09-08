@@ -35,7 +35,10 @@ export function GuardianNotifiedScreen() {
     setPhase("sending");
     setErrorMessage(null);
     try {
-      await sendGuardianAlert({
+      // Synthetic event only to satisfy the shared signature — source
+      // "manual" tells sendGuardianAlert to null out every sensor field on
+      // the crash ticket it opens for partners.
+      const { ticketId } = await sendGuardianAlert({
         event: {
           severity: 1,
           trigger: "impact",
@@ -47,7 +50,12 @@ export function GuardianNotifiedScreen() {
           receivedAt: Date.now(),
         },
         userId: session.user.id,
+        source: "manual",
       });
+      if (ticketId) {
+        navigation.replace("ActiveTicket", { ticketId });
+        return;
+      }
       setPhase("sent");
     } catch (err) {
       console.warn("[emergency] failed to send manual guardian alert", err);

@@ -72,8 +72,12 @@ export function EmergencyCountdownScreen() {
       return;
     }
     try {
-      await sendGuardianAlert({ event, userId: session.user.id });
-      navigation.replace("EmergencyAlertSent", { guardianNames: (guardians ?? []).map((g) => g.name) });
+      const { ticketId } = await sendGuardianAlert({ event, userId: session.user.id, source: "crash" });
+      if (ticketId) {
+        navigation.replace("ActiveTicket", { ticketId });
+      } else {
+        navigation.replace("EmergencyAlertSent", { guardianNames: (guardians ?? []).map((g) => g.name) });
+      }
     } catch (err) {
       console.warn("[emergency] failed to send guardian alert", err);
       setPhase("error");

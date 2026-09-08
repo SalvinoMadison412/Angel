@@ -27,7 +27,8 @@ export async function configureCrashNotificationChannel(): Promise<void> {
   await Notifications.setNotificationChannelAsync(CRASH_CHANNEL_ID, {
     name: "Crash alerts",
     importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 500, 250, 500, 250, 500],
+    // Two short pulses — see the matching note in angelAlerts.ts.
+    vibrationPattern: [0, 300, 150, 300],
     lightColor: "#FF5722",
   });
 }
@@ -61,8 +62,8 @@ export async function presentCrashNotification(event: CrashEvent): Promise<void>
   const data: Record<string, unknown> = { ...event, kind: "crash" };
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "⚠ Crash detected",
-      body: "Tap to check in before guardians are alerted.",
+      title: "Crash detected",
+      body: "Tap to check in before your guardians are alerted.",
       data,
       sound: "default",
       priority: Notifications.AndroidNotificationPriority.MAX,

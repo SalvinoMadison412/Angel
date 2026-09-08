@@ -1,7 +1,9 @@
 // Central status store for every permission the first-launch gate
-// (PermissionsGateScreen) walks through — notifications, location
-// (foreground + Android background), and Android BLE runtime permissions.
-// Same module-level pub/sub shape as locationTracking.ts's permission
+// (PermissionsGateScreen) walks through — notifications, precise
+// foreground location, and Android BLE runtime permissions. Background
+// location is tracked here too (see locationBackground below) but is no
+// longer requested by the gate itself. Same module-level pub/sub shape as
+// locationTracking.ts's permission
 // status, deliberately: PermissionBanner and the gate screen both need to
 // react to a status that can change from outside React (a rider flipping a
 // toggle in system Settings while the app is backgrounded), and
@@ -23,7 +25,7 @@ export interface PermissionSnapshot {
   notifications: boolean;
   locationForeground: boolean;
   locationForegroundPrecise: boolean;
-  /** Always true on iOS — Angel does not request background location there (see requestLocationBackgroundPermission). */
+  /** Status only — Angel no longer requests this permission anywhere; reflects whatever the OS reports (granted only if set manually via Settings). */
   locationBackground: boolean;
   /** Always true on iOS — BLE permission there is granted implicitly at first scan, no explicit runtime request exists. */
   bluetooth: boolean;
@@ -115,14 +117,6 @@ export async function requestLocationForegroundPermission(): Promise<{ granted: 
   const precise = granted ? !(result.android?.accuracy === "coarse" || result.ios?.accuracy === "reduced") : false;
   await refreshPermissionSnapshot();
   return { granted, precise };
-}
-
-/** Android only — must be called after foreground location is already granted (OS requirement). No-op on iOS. */
-export async function requestLocationBackgroundPermission(): Promise<boolean> {
-  if (Platform.OS !== "android") return true;
-  const result = await Location.requestBackgroundPermissionsAsync();
-  await refreshPermissionSnapshot();
-  return result.status === "granted";
 }
 
 /** Android only — iOS grants BLE implicitly at first scan, no separate runtime prompt exists. */

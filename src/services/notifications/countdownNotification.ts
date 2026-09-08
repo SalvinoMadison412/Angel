@@ -45,9 +45,9 @@ function countdownBody(secondsLeft: number, totalSeconds: number): string {
   // is just the updated count, so the notification doesn't repeat the same
   // sentence every second.
   if (secondsLeft >= totalSeconds) {
-    return `Guardian alert sending in ${n} ${unit}. Tap CANCEL to stop it.`;
+    return `Alerting your guardians in ${n} ${unit}. Tap CANCEL to stop.`;
   }
-  return `Guardian alert sending in ${n} ${unit}...`;
+  return `Alerting your guardians in ${n} ${unit}…`;
 }
 
 /**
@@ -62,7 +62,7 @@ export async function presentCountdownNotification(secondsLeft: number, totalSec
   await Notifications.scheduleNotificationAsync({
     identifier: COUNTDOWN_NOTIFICATION_ID,
     content: {
-      title: "⚠️ ANGEL — Crash Detected",
+      title: "Crash detected",
       body: countdownBody(secondsLeft, totalSeconds),
       data,
       sound: "default",

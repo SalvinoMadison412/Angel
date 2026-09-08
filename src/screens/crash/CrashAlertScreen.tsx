@@ -1,12 +1,16 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import * as Location from "expo-location";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar, PillButton, RadialCountdown, ScreenBackground, SeverityMeter } from "../../components";
 import { useAuth, useDevice, useGuardians } from "../../hooks";
-import { cancelCrashEvent, confirmIncident, queuePendingDispatch, subscribeCountdownCancel } from "../../services/emergency";
-import { getLastKnownCoords } from "../../services/location/locationTracking";
+import {
+  cancelCrashEvent,
+  confirmIncident,
+  createCrashTicket,
+  queuePendingDispatch,
+  subscribeCountdownCancel,
+} from "../../services/emergency";
 import { dismissCountdownNotification, presentCountdownNotification } from "../../services/notifications";
 import { supabase } from "../../lib/supabase";
 import { colors, radius, severityColor, spacing, type } from "../../theme";
@@ -29,7 +33,6 @@ export function CrashAlertScreen() {
   // TODO: RE-ENABLE FOR V2 — nearest-responder matching removed for the v1
   // Play Store release (guardians-only via WhatsApp).
   // const { data: responders } = useResponders(responderTypesForSeverity(severity));
-  // const assignResponder = useAssignResponder();
   const insets = useSafeAreaInsets();
 
   const [secondsLeft, setSecondsLeft] = useState(() => remainingCountdownSeconds(receivedAt, totalSeconds));
@@ -49,63 +52,14 @@ export function CrashAlertScreen() {
 
   useEffect(() => {
     if (ticketPromiseRef.current) return;
-    ticketPromiseRef.current = (async (): Promise<string | null> => {
-      if (!session?.user.id || severity < 2) return null;
-
-      // Prefers the cached fix from the live watch (locationTracking.ts) —
-      // instant, no GPS wait — falling back to a fresh fix only if the
-      // watch hasn't produced one yet. See captureCurrentLocation in
-      // emergencyPipeline.ts for the same pattern.
-      let riderLat: number | null = null;
-      let riderLng: number | null = null;
-      const cached = getLastKnownCoords();
-      if (cached) {
-        riderLat = cached.lat;
-        riderLng = cached.lng;
-      } else {
-        try {
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status === "granted") {
-            const position = await Location.getCurrentPositionAsync({});
-            riderLat = position.coords.latitude;
-            riderLng = position.coords.longitude;
-          }
-        } catch (err) {
-          console.warn("[crash-ticket] failed to capture location", err);
-        }
-      }
-
-      // Privacy-policy alignment note: this insert is deliberately
-      // medical-data-free — crash_tickets has no blood_group/medical_conditions
-      // columns (see its schema in migration 0005_partners_platform.sql), so
-      // a partner reading an open ticket sees only sensor/location data,
-      // never medical info, regardless of ticket status. See the matching
-      // comment in emergencyPipeline.ts's confirmIncident() for the full
-      // audit of where medical data can (and currently cannot) reach a
-      // partner.
-      try {
-        const { data, error } = await supabase
-          .from("crash_tickets")
-          .insert({
-            rider_id: session.user.id,
-            severity,
-            trigger,
-            impact_g: impactG,
-            gyro_dps: gyroDps,
-            tilt_deg: tilt,
-            rider_lat: riderLat,
-            rider_lng: riderLng,
-            status: "open",
-          })
-          .select("id")
-          .single();
-        if (error) throw error;
-        return data.id as string;
-      } catch (err) {
-        console.warn("[crash-ticket] failed to create ticket", err);
-        return null;
-      }
-    })();
+    // Deliberately medical-data-free — crash_tickets has no medical columns
+    // (migration 0005), so a partner reading an open ticket sees only
+    // sensor/location data. See the audit comment in
+    // emergencyPipeline.confirmIncident() for the full picture.
+    ticketPromiseRef.current =
+      !session?.user.id || severity < 2
+        ? Promise.resolve(null)
+        : createCrashTicket({ userId: session.user.id, source: "crash", event });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

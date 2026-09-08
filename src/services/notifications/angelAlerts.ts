@@ -15,7 +15,9 @@ import * as Notifications from "expo-notifications";
 import { AppState, Platform } from "react-native";
 import { publishInAppAlert } from "./inAppAlertBus";
 
-export const ANGEL_ACCENT_COLOR = "#FF4500";
+// Matches colors.accent — the OS tints the app name / small icon with this,
+// so it should read as the app's accent, not a louder alarm red.
+export const ANGEL_ACCENT_COLOR = "#FF5722";
 
 const CRASH_CONFIRMED_CHANNEL_ID = "angel-safety-alerts-crash";
 const SPEED_ALERT_CHANNEL_ID = "angel-safety-alerts-speed";
@@ -34,10 +36,14 @@ export async function configureAngelSafetyChannels(): Promise<void> {
   await Notifications.setNotificationChannelAsync(CRASH_CONFIRMED_CHANNEL_ID, {
     name: "Angel Safety Alerts",
     description: CHANNEL_DESCRIPTION,
+    // Still a heads-up alert that bypasses Do Not Disturb — this can fire
+    // when the rider is hurt and the phone is in a pocket. Only the buzz is
+    // dialled back: two short pulses instead of three long ones.
+    // ponytail: hand-tuned haptic — lengthen if field testing says riders miss it.
     importance: Notifications.AndroidImportance.MAX,
     bypassDnd: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    vibrationPattern: [0, 500, 250, 500, 250, 500],
+    vibrationPattern: [0, 300, 150, 300],
     lightColor: ANGEL_ACCENT_COLOR,
   });
   await Notifications.setNotificationChannelAsync(SPEED_ALERT_CHANNEL_ID, {
@@ -52,8 +58,11 @@ export interface CrashConfirmedNotificationData {
   kind: "crash_confirmed";
 }
 
-const CRASH_CONFIRMED_TITLE = "⚠️ ANGEL — CRASH DETECTED";
-const CRASH_CONFIRMED_BODY = "A crash has been detected. Guardian alert sent. Tap to open Angel.";
+// Sentence case, no emoji, no "ANGEL —" prefix — Android already shows the
+// Angel name and (accent-tinted) icon in the notification header, so the
+// title just needs to say what happened.
+const CRASH_CONFIRMED_TITLE = "Crash detected";
+const CRASH_CONFIRMED_BODY = "Your guardians have been notified. Tap for details.";
 
 async function scheduleCrashConfirmedSystemNotification(): Promise<void> {
   const data: Record<string, unknown> = { kind: "crash_confirmed" };
@@ -85,25 +94,14 @@ export async function presentCrashConfirmedAlert(): Promise<void> {
   await scheduleCrashConfirmedSystemNotification();
 }
 
-/**
- * DiagnosticScreen-only (__DEV__): always schedules the real system
- * notification, even in the foreground, so its title/body/icon/color/channel
- * behavior can actually be inspected on-device — presentCrashConfirmedAlert()
- * would otherwise route to the in-app banner whenever the app testing it is,
- * itself, in the foreground.
- */
-export async function presentCrashConfirmedAlertForPreview(): Promise<void> {
-  await scheduleCrashConfirmedSystemNotification();
-}
-
 export interface SpeedAlertNotificationData {
   kind: "speed_alert";
 }
 
 const SPEED_ALERT_NOTIFICATION_ID = "angel-speed-alert";
 const SPEED_ALERT_AUTO_DISMISS_MS = 10_000;
-const SPEED_ALERT_TITLE = "🏎️ ANGEL — SPEED ALERT";
-const SPEED_ALERT_BODY = "You are riding above 80 km/h. Ride safe.";
+const SPEED_ALERT_TITLE = "Speed alert";
+const SPEED_ALERT_BODY = "Riding above 80 km/h. Ride safe.";
 
 async function scheduleSpeedAlertSystemNotification(): Promise<void> {
   await Notifications.scheduleNotificationAsync({
@@ -132,16 +130,6 @@ export async function presentSpeedAlert(): Promise<void> {
     publishInAppAlert("speed", SPEED_ALERT_TITLE, SPEED_ALERT_BODY);
     return;
   }
-  await scheduleSpeedAlertSystemNotification();
-}
-
-/**
- * DiagnosticScreen-only (__DEV__): always schedules the real system
- * notification, bypassing both the foreground → in-app-banner redirect
- * above and speedMonitor's 3s-sustained/5min-cooldown gating, so it fires
- * immediately regardless of app state or recent alert history.
- */
-export async function presentSpeedAlertForPreview(): Promise<void> {
   await scheduleSpeedAlertSystemNotification();
 }
 

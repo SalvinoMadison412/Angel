@@ -15,6 +15,7 @@ export type ProfileStackParamList = {
   Plan: undefined;
   Settings: undefined;
   EditProfile: undefined;
+  Insurance: undefined;
 };
 
 export type ProfileStackNavigation = NativeStackNavigationProp<ProfileStackParamList>;
@@ -47,9 +48,6 @@ export type RootStackParamList = {
   // it, see GuardianNotifiedScreen.tsx.
   GuardianNotified: undefined;
   GuardianForm: { guardianId?: string };
-  // TEMP DIAGNOSTIC — remove once the calibration_complete investigation is
-  // resolved. See screens/debug/DiagnosticScreen.tsx.
-  Diagnostic: undefined;
 };
 
 export type RootStackNavigation = NativeStackNavigationProp<RootStackParamList>;

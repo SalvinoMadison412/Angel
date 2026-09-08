@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InAppAlert, subscribeInAppAlerts } from "../services/notifications/inAppAlertBus";
-import { colors, spacing, type } from "../theme";
+import { colors, fontFamily, spacing } from "../theme";
 
 const AUTO_DISMISS_MS = 5000;
 const ANIM_MS = 220;
@@ -55,10 +55,11 @@ export function InAppAlertHost() {
       style={[styles.wrap, { paddingTop: insets.top + spacing.sm, opacity, transform: [{ translateY }] }]}
     >
       <Animated.View style={styles.card}>
+        <Animated.View style={styles.accentBar} />
         <Image source={require("../../assets/icon.png")} style={styles.icon} />
         <Animated.View style={styles.textWrap}>
-          <Text style={[type.kicker, styles.title]}>{alert.title}</Text>
-          <Text style={[type.bodySmall, styles.body]}>{alert.body}</Text>
+          <Text style={styles.title}>{alert.title}</Text>
+          <Text style={styles.body}>{alert.body}</Text>
         </Animated.View>
       </Animated.View>
     </Animated.View>
@@ -79,19 +80,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: "#050508",
-    borderRadius: 16,
+    backgroundColor: colors.bgElevated,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,69,0,0.5)",
+    borderColor: colors.glassBorder,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    paddingLeft: spacing.md + 3,
+    paddingRight: spacing.md,
+    overflow: "hidden",
     shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
-  icon: { width: 36, height: 36, borderRadius: 8 },
+  // The only accent left — a thin edge, off the text, so the copy stays
+  // high-contrast white/grey and still reads as an Angel alert.
+  accentBar: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.accent },
+  icon: { width: 32, height: 32, borderRadius: 8 },
   textWrap: { flex: 1, gap: 2 },
-  title: { color: "#FF4500" },
-  body: { color: colors.text },
+  title: { color: colors.text, fontFamily: fontFamily.bodySemiBold, fontSize: 15, lineHeight: 20 },
+  body: { color: colors.textMuted, fontFamily: fontFamily.body, fontSize: 13, lineHeight: 18 },
 });

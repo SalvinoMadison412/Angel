@@ -5,6 +5,8 @@ import { SchematicRouteMap } from "./SchematicRouteMap";
 interface Props {
   riderLat: number;
   riderLng: number;
+  partnerLat?: number | null;
+  partnerLng?: number | null;
   width?: number;
   height?: number;
 }

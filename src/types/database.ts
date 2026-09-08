@@ -3,6 +3,7 @@ export type IncidentStatus = "active" | "cancelled" | "resolved";
 export type AlertMode = "call" | "sms";
 export type SubscriptionTier = 3 | 6 | 12;
 export type BloodGroup = "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-";
+export type HospitalPreference = "government" | "private";
 
 export interface Profile {
   id: string;
@@ -50,6 +51,11 @@ export interface EmergencyProfile {
   date_of_birth: string | null;
   blood_group: BloodGroup | null;
   medical_conditions: string | null;
+  insurance_provider: string | null;
+  insurance_policy_name: string | null;
+  insurance_coverage: string | null;
+  insurance_covered: boolean;
+  hospital_preference: HospitalPreference | null;
   created_at: string;
   updated_at: string;
 }
@@ -89,11 +95,46 @@ export interface Incident {
   resolved_at: string | null;
 }
 
-export interface IncidentEvent {
+export type CrashTicketStatus = "open" | "accepted" | "closed" | "escalated";
+// 'crash' = a detected sensor event (any severity). 'manual' = the rider hit
+// "I NEED HELP NOW" — no sensor reading behind it, so severity/trigger/metrics
+// are null.
+export type CrashTicketSource = "crash" | "manual";
+
+// Every rider-initiated emergency — a detected crash (any severity) or a
+// manual SOS — opens a crash_tickets row (migration 0005) so nearby Angel
+// Partners can see and accept it while it's still open. Deliberately
+// medical-data-free — see the audit comment in
+// emergencyPipeline.confirmIncident.
+export interface CrashTicket {
   id: string;
-  incident_id: string;
-  label: string;
-  occurred_at: string;
+  rider_id: string;
+  source: CrashTicketSource;
+  severity: number | null;
+  trigger: "impact" | "tilt" | null;
+  impact_g: number | null;
+  gyro_dps: number | null;
+  tilt_deg: number | null;
+  rider_lat: number | null;
+  rider_lng: number | null;
+  status: CrashTicketStatus;
+  accepted_by: string | null;
+  accepted_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+}
+
+// The responder on the other side of an accepted crash ticket. The Angel
+// Partners app owns the partners table; the rider app only ever reads the
+// single row RLS exposes to it — the partner assigned to its own ticket
+// (policy partners_select_by_ticket_rider, migration 0005).
+export interface TicketPartner {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  current_lat: number | null;
+  current_lng: number | null;
+  location_updated_at: string | null;
 }
 
 export interface Subscription {
