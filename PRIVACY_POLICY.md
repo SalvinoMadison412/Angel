@@ -2,7 +2,7 @@
 
 **Last updated:** August 17, 2026
 
-Angel ("Angel", "we", "us") provides a two-wheeler crash-detection app that pairs with a sensor wired into your motorcycle's battery, detects possible crashes, and alerts your emergency contacts. This policy explains what data Angel collects, why, and how it's handled.
+Angel ("Angel", "we", "us") provides a two-wheeler crash-detection app that pairs with Atom, a vehicle-mounted crash sensor, detects possible crashes, and alerts your emergency contacts. This policy explains what data Angel collects, why, and how it's handled.
 
 ## Data we collect
 
