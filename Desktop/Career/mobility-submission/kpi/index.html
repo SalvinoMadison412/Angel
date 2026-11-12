@@ -89,15 +89,15 @@ footer code{font-size:10.5px;background:var(--card);border:1px solid var(--hair)
   <div class="kpis" id="kpis"></div>
 
   <h2>Week-over-week change</h2>
-  <p class="note">All-rows trips for the selected areas — follows the Month and Areas filters live. <span class="d">Δ</span> = weekly change vs the prior calendar week; ▲ up / ▼ down.</p>
+  <p class="note">All-rows trips and avg trip price for the selected areas — follows the Month and Areas filters live. <span class="d">Δ</span> = weekly change vs the prior calendar week; ▲ up / ▼ down.</p>
   <div class="panel" id="wowwrap"></div>
 
-  <h2>Weekly volume vs historical baseline band</h2>
-  <p class="note">All-rows actuals per week against the p25–p75 historical baseline envelope; the baseline is built on all rows, so this panel always compares on all rows. Red points fall outside the band.</p>
+  <h2>Weekly volume</h2>
+  <p class="note">All-rows trips per week for the selected areas — follows the Month and Areas filters live.</p>
   <div class="mm" id="mm"></div>
 
-  <h2>April vs March vs historical baseline</h2>
-  <p class="note">All-rows, all selected areas. Monthly totals plus the two weeks' p25–p75 historical baseline envelope (full-year 2025 reference). Rate metrics (match, coverage) compare in points; everything else in %.</p>
+  <h2>Selected period vs historical baseline</h2>
+  <p class="note">All-rows metrics for the selected period (Month filter) against the weekly historical baseline (full-year 2025 seasonal reference). Values update live with the Month and Areas filters.</p>
   <div class="panel" id="cmpwrap"></div>
 
   <details>
@@ -232,9 +232,8 @@ function renderPanels(){
     const s = DATA.areas[k];
     const W=460,H=150,ML=42,MR=8,MT=10,MB=20, iw=W-ML-MR, ih=H-MT-MB;
     let lo=Infinity, hi=-Infinity;
-    for(const i of idx){ const b=s.base[DATA.month[i]];
-      lo=Math.min(lo,b.p25,s.allrows[i]); hi=Math.max(hi,b.p75,s.allrows[i]); }
-    lo=lo*0.94; hi=hi*1.05;
+    for(const i of idx){ lo=Math.min(lo,s.allrows[i]); hi=Math.max(hi,s.allrows[i]); }
+    lo=lo*0.94; hi=hi*1.05; // padding also guards the flat-line (lo===hi) case
     const x=j=>ML+iw*(idx.length===1?0.5:j/(idx.length-1));
     const y=v=>MT+ih*(1-(v-lo)/(hi-lo));
     let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Weekly all-rows trips, '+s.name+'">';
@@ -243,35 +242,20 @@ function renderPanels(){
       svg+='<line x1="'+ML+'" x2="'+(W-MR)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--hair)"/>'+
            '<text x="'+(ML-6)+'" y="'+(yy+3.5)+'" text-anchor="end" font-size="9.5" fill="var(--faint)">'+Math.round(v/1000)+'k</text>';
     }
-    // band
-    let band="";
-    idx.forEach((ri,j)=>{ const b=s.base[DATA.month[ri]];
-      const xl=ML, xr=W-MR; // span each week slot
-      const w=(W-MR-ML)/idx.length, cx=ML+w*(j+0.5);
-      band += 'M'+(cx-w/2+1)+' '+y(b.p75)+' L'+(cx+w/2-1)+' '+y(b.p75)+' L'+(cx+w/2-1)+' '+y(b.p25)+' L'+(cx-w/2+1)+' '+y(b.p25)+' Z ';
-    });
-    svg+='<path d="'+band+'" fill="var(--band)"/>';
     // x labels
     idx.forEach((ri,j)=>{ svg+='<text x="'+x(j)+'" y="'+(H-5)+'" text-anchor="middle" font-size="9.5" fill="var(--faint)">'+DATA.labels[ri]+'</text>'; });
     // line
     svg+='<path d="'+idx.map((ri,j)=>(j?"L":"M")+x(j)+" "+y(s.allrows[ri])).join(" ")+'" fill="none" stroke="var(--accent)" stroke-width="1.5"/>';
     // points
     idx.forEach((ri,j)=>{
-      const v=s.allrows[ri], b=s.base[DATA.month[ri]], out=v<b.p25||v>b.p75;
-      svg+='<circle class="pt" data-k="'+k+'" data-i="'+ri+'" cx="'+x(j)+'" cy="'+y(v)+'" r="'+(out?3.5:2)+'" fill="'+(out?"var(--warn)":"var(--accent)")+'"'+(out?' stroke="#fff" stroke-width="1.5"':'')+'/>';
-      if(out){
-        const txt=((v-b.exp)/b.exp>=0?"+":"")+((v-b.exp)/b.exp*100).toFixed(1)+"%";
-        const above = y(v) > MT+ih/2;                    // point in lower half -> label above
-        const ly = above ? y(v)-9 : y(v)+14;              // keeps labels clear of top tick / bottom labels
-        const lx = Math.max(ML+24, Math.min(W-MR-24, x(j))); // clamp at plot edges
-        svg+='<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9.5" font-weight="600" fill="var(--warn)">'+txt+'</text>';
-      }
+      const v=s.allrows[ri];
+      svg+='<circle class="pt" data-k="'+k+'" data-i="'+ri+'" cx="'+x(j)+'" cy="'+y(v)+'" r="2.5" fill="var(--accent)"/>';
     });
     svg+="</svg>";
     const div=document.createElement("div");
     div.className="panel";
     div.innerHTML='<div class="pt">'+k+" · "+s.name+'</div>'+
-      '<div class="ps">all-rows weekly actuals · p25–p75 seasonal band</div>'+svg;
+      '<div class="ps">all-rows weekly trips</div>'+svg;
     host.appendChild(div);
   }
 }
@@ -300,46 +284,48 @@ function renderWow(){
   const idx = PERIODS[state.period];
   const keys = AREA_KEYS.filter(a=>state.areas.has(a));
   const totAt = ri => keys.reduce((s,k)=>s+DATA.areas[k].allrows[ri],0);
+  const priceAt = ri => { const v=totAt(ri);
+    return v? keys.reduce((s,k)=>s+DATA.areas[k].price[ri]*DATA.areas[k].allrows[ri],0)/v : 0; };
   let rows="";
   idx.forEach(ri=>{
-    const v=totAt(ri), ch=ri>0 ? (v-totAt(ri-1))/totAt(ri-1) : null;
+    const v=totAt(ri), p=priceAt(ri);
+    const ch=ri>0 ? (v-totAt(ri-1))/totAt(ri-1) : null;
+    const cp=ri>0 ? (p-priceAt(ri-1))/priceAt(ri-1) : null;
     const cell = ch==null ? '<span class="d">first week</span>' : delta(ch);
-    rows+='<tr><td><b>'+DATA.labels[ri]+'</b></td><td>'+fmt(v)+'</td><td>'+cell+'</td></tr>';
+    const pcell = cp==null ? '<span class="d">first week</span>' : delta(cp);
+    rows+='<tr><td><b>'+DATA.labels[ri]+'</b></td><td>'+fmt(v)+'</td><td>'+cell+'</td>'+
+      '<td>$'+p.toFixed(2)+'</td><td>'+pcell+'</td></tr>';
   });
-  $("wowwrap").innerHTML='<table><thead><tr><th>Week (Mon)</th><th>Trips (all rows)</th><th>Δ vs prior week</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  $("wowwrap").innerHTML='<table><thead><tr><th>Week (Mon)</th><th>Trips (all rows)</th><th>Δ trips vs prior</th><th>Avg price</th><th>Δ price vs prior</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
-// April vs March vs historical baseline (fixed monthly span, all selected areas)
+// selected period vs historical baseline — live on Month + Areas filters
 function renderCompare(){
-  const M=statsFor([0,1,2,3,4]), A=statsFor([5,6,7]);
+  const S=statsFor(PERIODS[state.period]);
   const drel=(a,b)=>b?(a-b)/b:null;
   const pct=v=>v==null?"—":(v>=0?"+":"")+(v*100).toFixed(1)+"%";
   const pts=v=>(v>=0?"+":"")+(v*100).toFixed(1)+" pts";
   // "rel" metrics compare in % (vs baseline too); "pts" metrics (rates) compare in points, no baseline
   const spec=[
     { name:"Trips (weekly avg)",         val:s=>s.wkVol,       fv:v=>fmt(v),
-      bapr:A.wkBaseExp, bmar:M.wkBaseExp, kind:"rel" },
+      base:S.wkBaseExp, kind:"rel" },
     { name:"Gross revenue (weekly avg)", val:s=>s.wkRev,       fv:v=>"$"+(v/1e6).toFixed(2)+"M",
-      bapr:A.wkBaseRev, bmar:M.wkBaseRev, kind:"rel" },
+      base:S.wkBaseRev, kind:"rel" },
     { name:"Avg trip price",             val:s=>s.price,       fv:v=>"$"+v.toFixed(2),
-      bapr:A.wkBasePrice, bmar:M.wkBasePrice, kind:"rel" },
+      base:S.wkBasePrice, kind:"rel" },
     { name:"Shared match rate",          val:s=>s.match,       fv:v=>(v*100).toFixed(1)+"%", kind:"pts" },
     { name:"Destination coverage",       val:s=>1-s.missing/100, fv:v=>(v*100).toFixed(1)+"%", kind:"pts" },
   ];
   let body="";
   for(const r of spec){
-    const aVal=r.val(A), mVal=r.val(M);
-    const dAprMar=r.kind==="rel"?pct(drel(aVal,mVal)):pts(aVal-mVal);
-    const hasBase=r.kind==="rel";
-    const baseCell=hasBase?(r.fv(r.bapr)+' <span class="d">/ '+r.fv(r.bmar)+'</span>'):'<span class="d">n/a</span>';
-    const dAprBase=hasBase?pct(drel(aVal,r.bapr)):"—";
-    const dMarBase=hasBase?pct(drel(mVal,r.bmar)):"—";
+    const v=r.val(S), base=r.base;
+    const dBase=r.kind==="rel"?pct(drel(v,base)):"—";
     body+='<tr><td><b>'+r.name+'</b></td>'+
-      '<td>'+r.fv(aVal)+'</td><td>'+r.fv(mVal)+'</td>'+
-      '<td class="d">'+dAprMar+'</td>'+
-      '<td>'+baseCell+'</td><td class="d">'+dAprBase+'</td><td class="d">'+dMarBase+'</td></tr>';
+      '<td>'+r.fv(v)+'</td>'+
+      '<td>'+(r.kind==="rel"?r.fv(base):'<span class="d">n/a</span>')+'</td>'+
+      '<td class="d">'+dBase+'</td></tr>';
   }
-  $("cmpwrap").innerHTML='<table><thead><tr><th>Metric</th><th>April (3 wk)</th><th>March (5 wk)</th><th>Δ Apr vs Mar</th><th>Baseline, Apr / Mar (weekly)</th><th>Δ Apr vs base</th><th>Δ Mar vs base</th></tr></thead><tbody>'+body+'</tbody></table>';
+  $("cmpwrap").innerHTML='<table><thead><tr><th>Metric</th><th>Selected period</th><th>Historical baseline (weekly)</th><th>Δ vs baseline</th></tr></thead><tbody>'+body+'</tbody></table>';
 }
 
 function renderAll(){
@@ -369,15 +355,10 @@ const tip=$("tip");
 $("mm").addEventListener("pointermove",e=>{
   const c=e.target.closest(".pt");
   if(!c){ tip.style.opacity=0; return; }
-  const k=c.dataset.k, i=+c.dataset.i, s=DATA.areas[k], b=s.base[DATA.month[i]], v=s.allrows[i];
+  const k=c.dataset.k, i=+c.dataset.i, s=DATA.areas[k], v=s.allrows[i];
   // (all rows)
-  const out=v<b.p25||v>b.p75, dv=(v-b.exp)/b.exp;
   tip.innerHTML='<b style="font-size:11.5px">'+k+" · "+s.name+" — wk "+DATA.labels[i]+'</b>'+
-    '<div class="row"><span class="k">Actual (all rows)</span><span>'+fmt(v)+'</span></div>'+
-    '<div class="row"><span class="k">Historical baseline</span><span>'+fmt(b.exp)+'</span></div>'+
-    '<div class="row"><span class="k">p25 – p75</span><span>'+fmt(b.p25)+" – "+fmt(b.p75)+'</span></div>'+
-    '<div class="row"><span class="k">vs baseline</span><span class="'+(out?"down":"up")+'">'+
-      (dv>=0?"+":"")+dv.toFixed(1)+"% "+(out?"(out of band)":"(in band)")+'</span></div>';
+    '<div class="row"><span class="k">All-rows trips</span><span>'+fmt(v)+'</span></div>';
   const r=c.getBoundingClientRect();
   tip.style.left=Math.min(window.innerWidth-230, r.left+12)+"px";
   tip.style.top=(r.top-10)+"px"; tip.style.opacity=1;
