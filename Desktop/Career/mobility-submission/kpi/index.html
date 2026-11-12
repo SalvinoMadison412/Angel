@@ -38,7 +38,6 @@ h2{font-size:12px;font-weight:600;color:var(--sub);margin:30px 0 10px}
 .note{font-size:11px;color:var(--faint);margin:0 0 10px}
 .mm{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .panel{background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:12px 14px}
-#wowwrap svg{height:250px}
 .pt{font-size:12px;font-weight:600}
 .ps{font-size:10.5px;color:var(--faint);margin:1px 0 6px}
 svg{display:block;width:100%;height:150px}
@@ -89,8 +88,8 @@ footer code{font-size:10.5px;background:var(--card);border:1px solid var(--hair)
 
   <div class="kpis" id="kpis"></div>
 
-  <h2>Week-over-week change — March → April</h2>
-  <p class="note">All-rows, all selected areas. Each bar = that week's volume change vs the prior week; the dashed line marks the March → April boundary. Full 8-week span (the Month filter doesn't apply to this panel).</p>
+  <h2>Week-over-week change</h2>
+  <p class="note">All-rows trips for the selected areas — follows the Month and Areas filters live. <span class="d">Δ</span> = weekly change vs the prior calendar week; ▲ up / ▼ down.</p>
   <div class="panel" id="wowwrap"></div>
 
   <h2>Weekly volume vs historical baseline band</h2>
@@ -296,34 +295,18 @@ function statsFor(W){
     wkBaseRev:exp?bpriceNum/n:0, wkBasePrice:exp?bpriceNum/exp:0 };
 }
 
-// week-over-week change, March -> April (fixed 8-week span, all selected areas)
+// week-over-week change — live on Month + Areas filters
 function renderWow(){
+  const idx = PERIODS[state.period];
   const keys = AREA_KEYS.filter(a=>state.areas.has(a));
-  const tot = DATA.weeks.map((_,i)=>keys.reduce((s,k)=>s+DATA.areas[k].allrows[i],0));
-  const chg = tot.slice(1).map((v,i)=>(v-tot[i])/tot[i]); // 7 bars, bar j = change INTO week j+1
-  const W=960,H=250,ML=40,MR=12,MT=18,MB=26, iw=W-ML-MR, ih=H-MT-MB;
-  let lo=Math.min(0,...chg), hi=Math.max(0,...chg);
-  const pad=(hi-lo)*0.18||0.02; lo-=pad; hi+=pad;
-  const x=j=>ML+iw*(j+0.5)/7, y=v=>MT+ih*(1-(v-lo)/(hi-lo));
-  let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Week-over-week change in all-rows trips">';
-  svg+='<line x1="'+ML+'" x2="'+(W-MR)+'" y1="'+y(0)+'" y2="'+y(0)+'" stroke="var(--ink)"/>'+
-       '<text x="'+(ML-6)+'" y="'+(y(0)+3.5)+'" text-anchor="end" font-size="9.5" fill="var(--faint)">0</text>';
-  // March -> April boundary: bar j=4 is the first April change (Apr 07 vs Mar 31)
-  const bx=ML+iw*4/7;
-  svg+='<line x1="'+bx+'" x2="'+bx+'" y1="'+MT+'" y2="'+(MT+ih)+'" stroke="var(--faint)" stroke-dasharray="4 3"/>'+
-       '<text x="'+bx+'" y="'+(MT-6)+'" text-anchor="middle" font-size="10" font-weight="600" fill="var(--ink)">Mar → Apr</text>';
-  chg.forEach((c,j)=>{
-    const i=j+1, marker=j===4, up=c>=0;
-    const x0=x(j), bw=iw/7*0.5, yc=y(0), yo=y(c);
-    const top=Math.min(yc,yo), h=Math.max(Math.abs(yc-yo),1);
-    svg+='<rect class="wowb" data-i="'+i+'" x="'+(x0-bw/2)+'" y="'+top+'" width="'+bw+'" height="'+h+'" rx="2" fill="'+(marker?"var(--ink)":up?"var(--accent)":"var(--warn)")+'"'+(marker?' stroke="#000" stroke-width="1"':'')+'/>';
-    const ly=up?top-7:yo+13;
-    svg+='<text x="'+x0+'" y="'+ly+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="'+(marker?"var(--ink)":up?"var(--ok)":"var(--warn)")+'">'+
-      (up?"+":"")+(c*100).toFixed(1)+"%</text>"+
-      '<text x="'+x0+'" y="'+(H-6)+'" text-anchor="middle" font-size="9.5" fill="var(--faint)">'+DATA.labels[i]+'</text>';
+  const totAt = ri => keys.reduce((s,k)=>s+DATA.areas[k].allrows[ri],0);
+  let rows="";
+  idx.forEach(ri=>{
+    const v=totAt(ri), ch=ri>0 ? (v-totAt(ri-1))/totAt(ri-1) : null;
+    const cell = ch==null ? '<span class="d">first week</span>' : delta(ch);
+    rows+='<tr><td><b>'+DATA.labels[ri]+'</b></td><td>'+fmt(v)+'</td><td>'+cell+'</td></tr>';
   });
-  svg+="</svg>";
-  $("wowwrap").innerHTML='<div class="ps">weekly Δ all-rows trips · full 8-week span · all selected areas ('+keys.length+'/4)</div>'+svg;
+  $("wowwrap").innerHTML='<table><thead><tr><th>Week (Mon)</th><th>Trips (all rows)</th><th>Δ vs prior week</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
 // April vs March vs historical baseline (fixed monthly span, all selected areas)
