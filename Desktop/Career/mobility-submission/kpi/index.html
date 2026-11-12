@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chicago Mobility — KPI Board</title>
+<style>
+:root{
+  --ink:#1a1a1a; --sub:#6e6e6e; --faint:#9c9c9c;
+  --hair:#e8e8e5; --card:#ffffff; --bg:#f9f9f8;
+  --accent:#2a78d6; --band:#e4eefb; --warn:#c03c3c; --ok:#0a7a3c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:13px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;padding:36px 20px 56px}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:16px;font-weight:600;margin:0}
+.meta{font-size:11.5px;color:var(--sub);margin:3px 0 0}
+/* filters */
+.filters{display:flex;flex-wrap:wrap;gap:18px;margin:22px 0 0;padding:14px 0;
+  border-top:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.fgroup{display:flex;align-items:center;gap:8px}
+.fgroup .flabel{font-size:11px;color:var(--faint)}
+.pill{font:inherit;font-size:11.5px;color:var(--sub);background:var(--card);
+  border:1px solid var(--hair);border-radius:6px;padding:4px 10px;cursor:pointer}
+.pill.on{color:var(--ink);border-color:var(--ink);font-weight:600}
+/* KPI tiles */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0 0}
+.tile{background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:14px}
+.tile .label{font-size:11px;color:var(--sub)}
+.tile .value{font-size:23px;font-weight:600;letter-spacing:-.01em;margin:5px 0 4px;
+  font-variant-numeric:tabular-nums}
+.tile .status{font-size:11px;color:var(--faint);line-height:1.45}
+.tile .status b{color:var(--sub);font-weight:600}
+.up{color:var(--ok);font-weight:600}.down{color:var(--warn);font-weight:600}
+/* sections */
+h2{font-size:12px;font-weight:600;color:var(--sub);margin:30px 0 10px}
+.note{font-size:11px;color:var(--faint);margin:0 0 10px}
+.mm{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.panel{background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:12px 14px}
+#wowwrap svg{height:250px}
+.pt{font-size:12px;font-weight:600}
+.ps{font-size:10.5px;color:var(--faint);margin:1px 0 6px}
+svg{display:block;width:100%;height:150px}
+/* table */
+table{width:100%;border-collapse:collapse;background:var(--card);
+  border:1px solid var(--hair);border-radius:8px;overflow:hidden;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;font-size:12px}
+th:first-child,td:first-child{text-align:left}
+thead th{color:var(--faint);font-weight:600;font-size:11px;background:var(--bg);
+  border-bottom:1px solid var(--hair)}
+tbody tr{border-top:1px solid var(--hair)}
+.d{color:var(--faint);font-size:11px}
+.out{color:var(--warn);font-weight:600}
+/* baseline method */
+details{background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:12px 14px;margin-top:26px}
+summary{font-size:12px;font-weight:600;cursor:pointer}
+details p{font-size:12px;color:var(--sub);margin:8px 0 0;line-height:1.6}
+details ul{margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--sub);line-height:1.6}
+footer{margin-top:24px;font-size:11px;color:var(--faint);line-height:1.7}
+footer code{font-size:10.5px;background:var(--card);border:1px solid var(--hair);border-radius:4px;padding:0 4px}
+#tip{position:fixed;pointer-events:none;background:var(--card);border:1px solid var(--hair);
+  border-radius:6px;padding:8px 10px;font-size:11.5px;line-height:1.5;box-shadow:0 3px 10px rgba(0,0,0,.08);
+  opacity:0;transition:opacity .1s;z-index:10;max-width:220px}
+#tip .row{display:flex;justify-content:space-between;gap:14px}
+#tip .k{color:var(--faint)}
+@media (max-width:820px){.kpis{grid-template-columns:repeat(2,1fr)}.mm{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Chicago Mobility — KPI board</h1>
+  <p class="meta" id="periodline"></p>
+
+  <div class="filters">
+    <div class="fgroup"><span class="flabel">Month</span>
+      <button class="pill on" data-p="all">All</button>
+      <button class="pill" data-p="mar">March</button>
+      <button class="pill" data-p="apr">April</button>
+    </div>
+    <div class="fgroup"><span class="flabel">Areas</span>
+      <button class="pill on" data-a="all">All</button>
+      <button class="pill on" data-a="24">West Town</button>
+      <button class="pill on" data-a="41">Hyde Park</button>
+      <button class="pill on" data-a="43">South Shore</button>
+      <button class="pill on" data-a="56">Garfield Ridge</button>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <h2>Week-over-week change — March → April</h2>
+  <p class="note">All-rows, all selected areas. Each bar = that week's volume change vs the prior week; the dashed line marks the March → April boundary. Full 8-week span (the Month filter doesn't apply to this panel).</p>
+  <div class="panel" id="wowwrap"></div>
+
+  <h2>Weekly volume vs historical baseline band</h2>
+  <p class="note">All-rows actuals per week against the p25–p75 historical baseline envelope; the baseline is built on all rows, so this panel always compares on all rows. Red points fall outside the band.</p>
+  <div class="mm" id="mm"></div>
+
+  <h2>April vs March vs historical baseline</h2>
+  <p class="note">All-rows, all selected areas. Monthly totals plus the two weeks' p25–p75 historical baseline envelope (full-year 2025 reference). Rate metrics (match, coverage) compare in points; everything else in %.</p>
+  <div class="panel" id="cmpwrap"></div>
+
+  <details>
+    <summary>How the baseline comparison works</summary>
+    <p>The baseline table's grain is <b>month × ISO weekday × hour × pickup area</b> (8,064 slots, 4–5 observed dates each), computed over full-year 2025. To compare a week: take the week's 168 calendar hours, join each to its slot, and sum.
+    <ul>
+      <li><b>Baseline volume</b> = Σ <code>avg_trip_count</code> across the week's slots (the historical baseline for that calendar week).</li>
+      <li><b>Envelope</b> = Σ p25 and p75 separately — the baseline band of variation.</li>
+      <li><b>Population:</b> every figure on this board — KPIs, charts, tables, and the baseline — is computed on <i>all rows</i>, no population filter.</li>
+      <li><b>Leakage caveat:</b> the baseline includes dates after the Mar–Apr 2025 window, so it is a seasonal reference, not an as-of forecast. Use: "is this week unusual for its calendar week?", not "did we beat forecast".</li>
+    </ul></p>
+  </details>
+
+  <footer>
+    Sources: <code>raw.trips_initial</code> 965,201 rows + <code>incremental_trips.parquet</code> 305,457 rows (deduped: 100 in-file dupes, 50 cross-delivery, 25 sentinel-999, 125 late).
+    All figures computed on all rows (no population filter); trips restricted to pickup areas {24, 41, 43, 56}.
+    Validation: 3/3 tests in <code>sql/validation.sql</code> PASS (dashboards A &amp; B reproduced 24/24 cells).
+  </footer>
+</div>
+<div id="tip"></div>
+
+<script>
+"use strict";
+const DATA = {
+  weeks:["2025-03-03","2025-03-10","2025-03-17","2025-03-24","2025-03-31","2025-04-07","2025-04-14","2025-04-21"],
+  labels:["Mar 03","Mar 10","Mar 17","Mar 24","Mar 31","Apr 07","Apr 14","Apr 21"],
+  month:[3,3,3,3,3,4,4,4],
+  areas:{
+    24:{name:"West Town",
+      allrows:[78017,92281,77768,75839,76983,77317,72900,79293],
+      price:[18.97,21.56,21.64,19.76,20.41,19.00,19.28,20.38],
+      match:[0.015,0.015,0.022,0.018,0.017,0.015,0.017,0.017],
+      auth:[0.024,0.022,0.031,0.026,0.026,0.023,0.024,0.024],
+      missing:[3.87,4.07,3.91,3.6,3.88,4.16,4.29,4.14],
+      base:{3:{exp:80475,p25:74757,p75:82637,bprice:20.84},4:{exp:76467,p25:73006,p75:79905,bprice:20.65}}},
+    41:{name:"Hyde Park",
+      allrows:[43607,36085,25665,42184,32803,31401,31258,32056],
+      price:[13.53,18.76,19.66,14.22,20.88,18.88,20.26,20.94],
+      match:[0.280,0.220,0.147,0.273,0.024,0.022,0.022,0.022],
+      auth:[0.330,0.286,0.183,0.316,0.034,0.032,0.033,0.031],
+      missing:[2.04,2.64,3.35,2.18,3.02,3.10,3.37,3.21],
+      base:{3:{exp:37238,p25:31654,p75:43587,bprice:17.98},4:{exp:31718,p25:29794,p75:33423,bprice:20.62}}},
+    43:{name:"South Shore",
+      allrows:[21813,20516,19500,18683,19124,19016,18904,17800],
+      price:[19.37,20.34,20.74,19.93,20.35,19.07,19.56,19.95],
+      match:[0.071,0.074,0.089,0.084,0.080,0.068,0.069,0.073],
+      auth:[0.096,0.098,0.114,0.111,0.107,0.093,0.093,0.096],
+      missing:[8.42,8.35,8.42,8.79,8.12,8.55,8.80,8.07],
+      base:{3:{exp:20257,p25:18957,p75:21415,bprice:19.87},4:{exp:18639,p25:17766,p75:19502,bprice:19.58}}},
+    56:{name:"Garfield Ridge",
+      allrows:[24812,27180,24763,26152,28025,25742,24863,28133],
+      price:[42.43,43.55,42.12,43.70,45.34,41.34,41.37,43.87],
+      match:[0.007,0.007,0.009,0.007,0.008,0.007,0.007,0.007],
+      auth:[0.013,0.012,0.016,0.013,0.014,0.014,0.013,0.011],
+      missing:[31.11,29.53,31.15,32.48,34.78,32.04,30.38,29.09],
+      base:{3:{exp:25847,p25:23143,p75:28387,bprice:39.96},4:{exp:26401,p25:23654,p75:28787,bprice:39.61}}}
+  }
+};
+const AREA_KEYS = Object.keys(DATA.areas).map(Number);
+const PERIODS = { all:[0,1,2,3,4,5,6,7], mar:[0,1,2,3,4], apr:[5,6,7] };
+const PERIOD_LABEL = { all:"All 8 weeks · Mar 03 – Apr 21, 2025", mar:"March 2025 · 5 weeks", apr:"April 2025 · 3 weeks" };
+let state = { period:"all", areas:new Set(AREA_KEYS) };
+
+const fmt = n => Math.round(n).toLocaleString("en-US");
+const $ = id => document.getElementById(id);
+const sum = (a,f=0) => a.reduce((s,x)=>s+x,0);
+const sumIdx = (arr, idx, f=(x)=>x) => idx.reduce((s,i)=>s+f(arr[i]),0);
+const wavg = (vals, idx, w, f) => { let n=0,d=0; for(const i of idx){ n+=f(vals[i])*f(w[i]); d+=f(w[i]); } return d?n/d:0; };
+
+// aggregate over selected weeks + selected areas — everything on ALL ROWS
+function agg(){
+  const idx = PERIODS[state.period];
+  const keys = AREA_KEYS.filter(a=>state.areas.has(a));
+  const sel = keys.map(k=>DATA.areas[k]);
+  const volume = sum(sel.map(s=>sumIdx(s.allrows,idx)));
+  const revenue = sel.reduce((R,s)=>R + idx.reduce((r,i)=>r + s.price[i]*s.allrows[i], 0), 0);
+  const price = revenue/volume;
+  // volume-weighted rates across all rows
+  const rate = (field, weight) => {
+    let n=0,d=0;
+    for(const s of sel) for(const i of idx){ n+=s[field][i]*s[weight][i]; d+=s[weight][i]; }
+    return d? n/d : 0;
+  };
+  const match  = rate("match","allrows");
+  const auth   = rate("auth","allrows");
+  const missing= rate("missing","allrows");
+  // historical baseline over the same period + areas
+  let exp=0, bpriceNum=0, inband=0, cells=0;
+  for(const k of keys){
+    const s=DATA.areas[k];
+    for(const i of idx){
+      const b=s.base[DATA.month[i]], lo=s.allrows[i];
+      exp+=b.exp; bpriceNum+=b.bprice*b.exp;
+      cells++; if(lo>=b.p25 && lo<=b.p75) inband++;
+    }
+  }
+  const bprice = bpriceNum/exp;
+  return { idx, keys, volume, revenue, price, match, auth, missing, exp, bprice, inband, cells,
+           volD: (volume-exp)/exp,
+           priceD: (price-bprice)/bprice };
+}
+
+function delta(v){
+  const up = v >= 0;
+  return '<span class="'+(up?"up":"down")+'">'+(up?"▲":"▼")+" "+Math.abs(v*100).toFixed(1)+"%</span>";
+}
+
+function renderTiles(){
+  const a = agg();
+  const tiles = [
+    { label:"Trips (all rows)", value: fmt(a.volume),
+      status: delta(a.volD)+" vs baseline · "+a.inband+"/"+a.cells+" weeks in band" },
+    { label:"Gross revenue", value: "$"+(a.revenue/1e6).toFixed(1)+"M",
+      status: "vol "+delta(a.volD)+" · price "+delta(a.priceD)+" vs baseline" },
+    { label:"Avg trip price", value: "$"+a.price.toFixed(2),
+      status: delta(a.priceD)+" vs baseline · tips+fees ≈ 27%" },
+    { label:"Shared match rate", value: (a.match*100).toFixed(1)+"%",
+      status: "auth "+(a.auth*100).toFixed(1)+"% · hold — flag change ~Mar 31" },
+    { label:"Destination coverage", value: (100-a.missing).toFixed(1)+"%",
+      status: a.missing.toFixed(1)+"% unknown dropoff" },
+  ];
+  $("kpis").innerHTML = tiles.map(t=>
+    '<div class="tile"><div class="label">'+t.label+'</div>'+
+    '<div class="value">'+t.value+'</div><div class="status">'+t.status+'</div></div>').join("");
+}
+
+function renderPanels(){
+  const idx = PERIODS[state.period];
+  const host = $("mm");
+  host.innerHTML = "";
+  for(const k of AREA_KEYS.filter(a=>state.areas.has(a))){
+    const s = DATA.areas[k];
+    const W=460,H=150,ML=42,MR=8,MT=10,MB=20, iw=W-ML-MR, ih=H-MT-MB;
+    let lo=Infinity, hi=-Infinity;
+    for(const i of idx){ const b=s.base[DATA.month[i]];
+      lo=Math.min(lo,b.p25,s.allrows[i]); hi=Math.max(hi,b.p75,s.allrows[i]); }
+    lo=lo*0.94; hi=hi*1.05;
+    const x=j=>ML+iw*(idx.length===1?0.5:j/(idx.length-1));
+    const y=v=>MT+ih*(1-(v-lo)/(hi-lo));
+    let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Weekly all-rows trips, '+s.name+'">';
+    // ticks
+    for(let t=0;t<=2;t++){ const v=lo+(hi-lo)*t/2, yy=y(v);
+      svg+='<line x1="'+ML+'" x2="'+(W-MR)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--hair)"/>'+
+           '<text x="'+(ML-6)+'" y="'+(yy+3.5)+'" text-anchor="end" font-size="9.5" fill="var(--faint)">'+Math.round(v/1000)+'k</text>';
+    }
+    // band
+    let band="";
+    idx.forEach((ri,j)=>{ const b=s.base[DATA.month[ri]];
+      const xl=ML, xr=W-MR; // span each week slot
+      const w=(W-MR-ML)/idx.length, cx=ML+w*(j+0.5);
+      band += 'M'+(cx-w/2+1)+' '+y(b.p75)+' L'+(cx+w/2-1)+' '+y(b.p75)+' L'+(cx+w/2-1)+' '+y(b.p25)+' L'+(cx-w/2+1)+' '+y(b.p25)+' Z ';
+    });
+    svg+='<path d="'+band+'" fill="var(--band)"/>';
+    // x labels
+    idx.forEach((ri,j)=>{ svg+='<text x="'+x(j)+'" y="'+(H-5)+'" text-anchor="middle" font-size="9.5" fill="var(--faint)">'+DATA.labels[ri]+'</text>'; });
+    // line
+    svg+='<path d="'+idx.map((ri,j)=>(j?"L":"M")+x(j)+" "+y(s.allrows[ri])).join(" ")+'" fill="none" stroke="var(--accent)" stroke-width="1.5"/>';
+    // points
+    idx.forEach((ri,j)=>{
+      const v=s.allrows[ri], b=s.base[DATA.month[ri]], out=v<b.p25||v>b.p75;
+      svg+='<circle class="pt" data-k="'+k+'" data-i="'+ri+'" cx="'+x(j)+'" cy="'+y(v)+'" r="'+(out?3.5:2)+'" fill="'+(out?"var(--warn)":"var(--accent)")+'"'+(out?' stroke="#fff" stroke-width="1.5"':'')+'/>';
+      if(out){
+        const txt=((v-b.exp)/b.exp>=0?"+":"")+((v-b.exp)/b.exp*100).toFixed(1)+"%";
+        const above = y(v) > MT+ih/2;                    // point in lower half -> label above
+        const ly = above ? y(v)-9 : y(v)+14;              // keeps labels clear of top tick / bottom labels
+        const lx = Math.max(ML+24, Math.min(W-MR-24, x(j))); // clamp at plot edges
+        svg+='<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9.5" font-weight="600" fill="var(--warn)">'+txt+'</text>';
+      }
+    });
+    svg+="</svg>";
+    const div=document.createElement("div");
+    div.className="panel";
+    div.innerHTML='<div class="pt">'+k+" · "+s.name+'</div>'+
+      '<div class="ps">all-rows weekly actuals · p25–p75 seasonal band</div>'+svg;
+    host.appendChild(div);
+  }
+}
+
+
+function statsFor(W){
+  const keys = AREA_KEYS.filter(a=>state.areas.has(a));
+  let vol=0, rev=0, mn=0, md=0, nn=0, nd=0, exp=0, p25=0, p75=0, bpriceNum=0;
+  for(const k of keys) for(const i of W){
+    const s=DATA.areas[k], b=s.base[DATA.month[i]];
+    vol+=s.allrows[i]; rev+=s.price[i]*s.allrows[i];
+    mn+=s.match[i]*s.allrows[i]; md+=s.allrows[i];
+    nn+=s.missing[i]*s.allrows[i]; nd+=s.allrows[i];
+    exp+=b.exp; p25+=b.p25; p75+=b.p75; bpriceNum+=b.bprice*b.exp;
+  }
+  const n=W.length;
+  return { vol, rev, n,
+    wkVol:vol/n, wkRev:rev/n, price:vol?rev/vol:0,
+    match:md?mn/md:0, missing:nd?nn/nd:0,
+    wkBaseExp:exp/n, wkBaseP25:p25/n, wkBaseP75:p75/n,
+    wkBaseRev:exp?bpriceNum/n:0, wkBasePrice:exp?bpriceNum/exp:0 };
+}
+
+// week-over-week change, March -> April (fixed 8-week span, all selected areas)
+function renderWow(){
+  const keys = AREA_KEYS.filter(a=>state.areas.has(a));
+  const tot = DATA.weeks.map((_,i)=>keys.reduce((s,k)=>s+DATA.areas[k].allrows[i],0));
+  const chg = tot.slice(1).map((v,i)=>(v-tot[i])/tot[i]); // 7 bars, bar j = change INTO week j+1
+  const W=960,H=250,ML=40,MR=12,MT=18,MB=26, iw=W-ML-MR, ih=H-MT-MB;
+  let lo=Math.min(0,...chg), hi=Math.max(0,...chg);
+  const pad=(hi-lo)*0.18||0.02; lo-=pad; hi+=pad;
+  const x=j=>ML+iw*(j+0.5)/7, y=v=>MT+ih*(1-(v-lo)/(hi-lo));
+  let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Week-over-week change in all-rows trips">';
+  svg+='<line x1="'+ML+'" x2="'+(W-MR)+'" y1="'+y(0)+'" y2="'+y(0)+'" stroke="var(--ink)"/>'+
+       '<text x="'+(ML-6)+'" y="'+(y(0)+3.5)+'" text-anchor="end" font-size="9.5" fill="var(--faint)">0</text>';
+  // March -> April boundary: bar j=4 is the first April change (Apr 07 vs Mar 31)
+  const bx=ML+iw*4/7;
+  svg+='<line x1="'+bx+'" x2="'+bx+'" y1="'+MT+'" y2="'+(MT+ih)+'" stroke="var(--faint)" stroke-dasharray="4 3"/>'+
+       '<text x="'+bx+'" y="'+(MT-6)+'" text-anchor="middle" font-size="10" font-weight="600" fill="var(--ink)">Mar → Apr</text>';
+  chg.forEach((c,j)=>{
+    const i=j+1, marker=j===4, up=c>=0;
+    const x0=x(j), bw=iw/7*0.5, yc=y(0), yo=y(c);
+    const top=Math.min(yc,yo), h=Math.max(Math.abs(yc-yo),1);
+    svg+='<rect class="wowb" data-i="'+i+'" x="'+(x0-bw/2)+'" y="'+top+'" width="'+bw+'" height="'+h+'" rx="2" fill="'+(marker?"var(--ink)":up?"var(--accent)":"var(--warn)")+'"'+(marker?' stroke="#000" stroke-width="1"':'')+'/>';
+    const ly=up?top-7:yo+13;
+    svg+='<text x="'+x0+'" y="'+ly+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="'+(marker?"var(--ink)":up?"var(--ok)":"var(--warn)")+'">'+
+      (up?"+":"")+(c*100).toFixed(1)+"%</text>"+
+      '<text x="'+x0+'" y="'+(H-6)+'" text-anchor="middle" font-size="9.5" fill="var(--faint)">'+DATA.labels[i]+'</text>';
+  });
+  svg+="</svg>";
+  $("wowwrap").innerHTML='<div class="ps">weekly Δ all-rows trips · full 8-week span · all selected areas ('+keys.length+'/4)</div>'+svg;
+}
+
+// April vs March vs historical baseline (fixed monthly span, all selected areas)
+function renderCompare(){
+  const M=statsFor([0,1,2,3,4]), A=statsFor([5,6,7]);
+  const drel=(a,b)=>b?(a-b)/b:null;
+  const pct=v=>v==null?"—":(v>=0?"+":"")+(v*100).toFixed(1)+"%";
+  const pts=v=>(v>=0?"+":"")+(v*100).toFixed(1)+" pts";
+  // "rel" metrics compare in % (vs baseline too); "pts" metrics (rates) compare in points, no baseline
+  const spec=[
+    { name:"Trips (weekly avg)",         val:s=>s.wkVol,       fv:v=>fmt(v),
+      bapr:A.wkBaseExp, bmar:M.wkBaseExp, kind:"rel" },
+    { name:"Gross revenue (weekly avg)", val:s=>s.wkRev,       fv:v=>"$"+(v/1e6).toFixed(2)+"M",
+      bapr:A.wkBaseRev, bmar:M.wkBaseRev, kind:"rel" },
+    { name:"Avg trip price",             val:s=>s.price,       fv:v=>"$"+v.toFixed(2),
+      bapr:A.wkBasePrice, bmar:M.wkBasePrice, kind:"rel" },
+    { name:"Shared match rate",          val:s=>s.match,       fv:v=>(v*100).toFixed(1)+"%", kind:"pts" },
+    { name:"Destination coverage",       val:s=>1-s.missing/100, fv:v=>(v*100).toFixed(1)+"%", kind:"pts" },
+  ];
+  let body="";
+  for(const r of spec){
+    const aVal=r.val(A), mVal=r.val(M);
+    const dAprMar=r.kind==="rel"?pct(drel(aVal,mVal)):pts(aVal-mVal);
+    const hasBase=r.kind==="rel";
+    const baseCell=hasBase?(r.fv(r.bapr)+' <span class="d">/ '+r.fv(r.bmar)+'</span>'):'<span class="d">n/a</span>';
+    const dAprBase=hasBase?pct(drel(aVal,r.bapr)):"—";
+    const dMarBase=hasBase?pct(drel(mVal,r.bmar)):"—";
+    body+='<tr><td><b>'+r.name+'</b></td>'+
+      '<td>'+r.fv(aVal)+'</td><td>'+r.fv(mVal)+'</td>'+
+      '<td class="d">'+dAprMar+'</td>'+
+      '<td>'+baseCell+'</td><td class="d">'+dAprBase+'</td><td class="d">'+dMarBase+'</td></tr>';
+  }
+  $("cmpwrap").innerHTML='<table><thead><tr><th>Metric</th><th>April (3 wk)</th><th>March (5 wk)</th><th>Δ Apr vs Mar</th><th>Baseline, Apr / Mar (weekly)</th><th>Δ Apr vs base</th><th>Δ Mar vs base</th></tr></thead><tbody>'+body+'</tbody></table>';
+}
+
+function renderAll(){
+  $("periodline").textContent = PERIOD_LABEL[state.period] + " · all rows · " +
+    state.areas.size + " of 4 areas";
+  renderTiles(); renderWow(); renderPanels(); renderCompare();
+}
+
+// filter wiring
+document.querySelectorAll(".pill").forEach(b=>{
+  b.addEventListener("click",()=>{
+    if(b.dataset.p){ state.period=b.dataset.p;
+      document.querySelectorAll('[data-p]').forEach(x=>x.classList.toggle("on",x===b)); }
+    else if(b.dataset.a==="all"){ state.areas=new Set(AREA_KEYS);
+      document.querySelectorAll('[data-a]').forEach(x=>x.classList.add("on")); }
+    else { const a=Number(b.dataset.a);
+      b.classList.contains("on") ? state.areas.delete(a) : state.areas.add(a);
+      if(state.areas.size===0) state.areas=new Set([a]); // keep at least one
+      document.querySelector('[data-a="all"]').classList.toggle("on",state.areas.size===4);
+      AREA_KEYS.forEach(k=>document.querySelector('[data-a="'+k+'"]').classList.toggle("on",state.areas.has(k))); }
+    renderAll();
+  });
+});
+
+// hover tooltip on panels
+const tip=$("tip");
+$("mm").addEventListener("pointermove",e=>{
+  const c=e.target.closest(".pt");
+  if(!c){ tip.style.opacity=0; return; }
+  const k=c.dataset.k, i=+c.dataset.i, s=DATA.areas[k], b=s.base[DATA.month[i]], v=s.allrows[i];
+  // (all rows)
+  const out=v<b.p25||v>b.p75, dv=(v-b.exp)/b.exp;
+  tip.innerHTML='<b style="font-size:11.5px">'+k+" · "+s.name+" — wk "+DATA.labels[i]+'</b>'+
+    '<div class="row"><span class="k">Actual (all rows)</span><span>'+fmt(v)+'</span></div>'+
+    '<div class="row"><span class="k">Historical baseline</span><span>'+fmt(b.exp)+'</span></div>'+
+    '<div class="row"><span class="k">p25 – p75</span><span>'+fmt(b.p25)+" – "+fmt(b.p75)+'</span></div>'+
+    '<div class="row"><span class="k">vs baseline</span><span class="'+(out?"down":"up")+'">'+
+      (dv>=0?"+":"")+dv.toFixed(1)+"% "+(out?"(out of band)":"(in band)")+'</span></div>';
+  const r=c.getBoundingClientRect();
+  tip.style.left=Math.min(window.innerWidth-230, r.left+12)+"px";
+  tip.style.top=(r.top-10)+"px"; tip.style.opacity=1;
+});
+$("mm").addEventListener("pointerleave",()=>tip.style.opacity=0);
+
+renderAll();
+</script>
+</body>
+</html>
